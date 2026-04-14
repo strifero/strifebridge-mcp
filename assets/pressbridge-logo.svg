@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 460 100" width="460" height="100">
+  <!-- Arc -->
+  <path d="M 18 68 Q 50 18 82 68" fill="none" stroke="#3D9FD5" stroke-width="5" stroke-linecap="round"/>
+  <!-- Left node -->
+  <circle cx="18" cy="68" r="9" fill="#3D9FD5"/>
+  <!-- Right node -->
+  <circle cx="82" cy="68" r="9" fill="#3D9FD5"/>
+  <!-- Wordmark -->
+  <text x="106" y="67" font-family="'Segoe UI', Arial, sans-serif" font-size="46" font-weight="700" fill="white" letter-spacing="-1">PressBridge</text>
+</svg>
