@@ -31,14 +31,30 @@ function sbmcp_get_widgets(WP_REST_Request $request) {
 }
 
 function sbmcp_update_widget(WP_REST_Request $request) {
+    global $wp_widget_factory;
     $params = $request->get_json_params();
     $widget_id = $params['widget_id'] ?? null; $settings = $params['settings'] ?? null;
     if (!$widget_id || $settings === null) return new WP_Error('missing_fields', 'Provide widget_id and settings.', ['status' => 400]);
     if (!preg_match('/^(.+)-(\d+)$/', $widget_id, $matches)) return new WP_Error('invalid_widget_id', 'Widget ID format must be "type-number".', ['status' => 400]);
+
+    // Validate the widget type is registered. id_base on each WP_Widget instance is the
+    // canonical type slug — without this check, an attacker could write to arbitrary
+    // wp_options rows of the form widget_<anything>.
+    $type = $matches[1];
+    $known_types = [];
+    if (isset($wp_widget_factory) && !empty($wp_widget_factory->widgets)) {
+        foreach ($wp_widget_factory->widgets as $widget) {
+            if (isset($widget->id_base)) $known_types[] = $widget->id_base;
+        }
+    }
+    if (!in_array($type, $known_types, true)) {
+        return new WP_Error('invalid_widget_type', 'Unknown widget type.', ['status' => 400]);
+    }
+
     // WordPress stores each widget type's settings in an option named 'widget_{type}'.
     // This is WP core's own naming convention, not a StrifeBridge MCP prefix.
-    $all = get_option('widget_' . $matches[1], []);
+    $all = get_option('widget_' . $type, []);
     $all[(int) $matches[2]] = $settings; $all['_multiwidget'] = 1;
-    update_option('widget_' . $matches[1], $all);
+    update_option('widget_' . $type, $all);
     return ['status' => 'updated', 'widget_id' => $widget_id];
 }

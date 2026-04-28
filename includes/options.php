@@ -12,10 +12,32 @@ define('SBMCP_OPTIONS_BLACKLIST', [
     'auth_salt', 'secure_auth_salt', 'logged_in_salt', 'nonce_salt',
     'sbmcp_api_token', 'sbmcp_api_disabled',
     'active_plugins', 'template', 'stylesheet',
+    'siteurl', 'home', 'admin_email',
+    'default_role', 'users_can_register',
+    'mailserver_url', 'mailserver_login', 'mailserver_pass',
 ]);
+
+/**
+ * Patterns that match option keys likely to hold credentials or secrets.
+ * Used by list_options to filter out third-party plugin secrets.
+ */
+const SBMCP_OPTIONS_SENSITIVE_PATTERNS = [
+    '/_key$/i',
+    '/_secret$/i',
+    '/token/i',
+    '/password/i',
+    '/_pass$/i',
+];
 
 function sbmcp_option_is_allowed(string $key): bool {
     return !in_array($key, SBMCP_OPTIONS_BLACKLIST, true);
+}
+
+function sbmcp_option_is_sensitive(string $key): bool {
+    foreach (SBMCP_OPTIONS_SENSITIVE_PATTERNS as $pattern) {
+        if (preg_match($pattern, $key)) return true;
+    }
+    return false;
 }
 
 function sbmcp_get_option(WP_REST_Request $request) {
@@ -40,6 +62,6 @@ function sbmcp_list_options(WP_REST_Request $request) {
     global $wpdb;
     $pattern = $request->get_param('pattern') ?? '%';
     $rows = $wpdb->get_results($wpdb->prepare("SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_name LIMIT 100", $pattern), ARRAY_A);
-    $rows = array_filter($rows, fn($r) => !in_array($r['option_name'], SBMCP_OPTIONS_BLACKLIST, true));
+    $rows = array_filter($rows, fn($r) => !in_array($r['option_name'], SBMCP_OPTIONS_BLACKLIST, true) && !sbmcp_option_is_sensitive($r['option_name']));
     return ['options' => array_values($rows), 'count' => count($rows)];
 }

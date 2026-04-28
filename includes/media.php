@@ -38,29 +38,30 @@ function sbmcp_upload_media(WP_REST_Request $request) {
         if (!in_array($scheme, ['http', 'https'], true)) {
             return new WP_Error('invalid_url', 'URL must use http or https.', ['status' => 400]);
         }
+        if (!wp_http_validate_url($url)) {
+            return new WP_Error('invalid_url', 'URL failed validation (private/loopback addresses are blocked).', ['status' => 400]);
+        }
         $id = media_sideload_image($url, 0, $title, 'id');
         if (is_wp_error($id)) return new WP_Error('upload_error', $id->get_error_message(), ['status' => 500]);
         return ['status' => 'uploaded', 'id' => $id, 'url' => wp_get_attachment_url($id)];
     }
 
     if ($b64 && $name) {
+        if (strtolower(pathinfo($name, PATHINFO_EXTENSION)) === 'svg') {
+            return new WP_Error('disallowed_type', 'SVG uploads are not supported.', ['status' => 400]);
+        }
         $data = base64_decode($b64);
         if ($data === false) return new WP_Error('invalid_base64', 'Invalid base64 data.', ['status' => 400]);
 
-        $svg_mime_filter = null;
-        $svg_ext_filter  = null;
-        if (strtolower(pathinfo($name, PATHINFO_EXTENSION)) === 'svg') {
-            $svg_mime_filter = function($mimes) { $mimes['svg'] = 'image/svg+xml'; return $mimes; };
-            $svg_ext_filter  = function($data, $file, $filename, $mimes) { if (strtolower(pathinfo($filename, PATHINFO_EXTENSION)) === 'svg') { $data['ext'] = 'svg'; $data['type'] = 'image/svg+xml'; } return $data; };
-            add_filter('upload_mimes', $svg_mime_filter, 10, 1);
-            add_filter('wp_check_filetype_and_ext', $svg_ext_filter, 10, 4);
-        }
         $upload = wp_upload_bits($name, null, $data);
-        if ($svg_mime_filter) { remove_filter('upload_mimes', $svg_mime_filter, 10); remove_filter('wp_check_filetype_and_ext', $svg_ext_filter, 10); }
         if ($upload['error']) return new WP_Error('upload_error', $upload['error'], ['status' => 500]);
 
         $filetype = wp_check_filetype($upload['file']);
-        $id = wp_insert_attachment(['post_mime_type' => $filetype['type'] ?: 'image/svg+xml', 'post_title' => $title ?? sanitize_file_name($name), 'post_content' => '', 'post_status' => 'inherit'], $upload['file']);
+        if (empty($filetype['type'])) {
+            @unlink($upload['file']);
+            return new WP_Error('disallowed_type', 'File type is not permitted.', ['status' => 400]);
+        }
+        $id = wp_insert_attachment(['post_mime_type' => $filetype['type'], 'post_title' => $title ?? sanitize_file_name($name), 'post_content' => '', 'post_status' => 'inherit'], $upload['file']);
         wp_update_attachment_metadata($id, wp_generate_attachment_metadata($id, $upload['file']));
         return ['status' => 'uploaded', 'id' => $id, 'url' => wp_get_attachment_url($id)];
     }

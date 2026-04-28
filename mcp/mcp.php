@@ -19,7 +19,7 @@ function sbmcp_register_mcp_route() {
     register_rest_route('pressbridge/v1', '/mcp',  $args);
 
     // Token-in-path route: the token embedded in the URL IS the authentication.
-    // permission_callback validates the token rather than using __return_true.
+    // show_in_index => false keeps the token out of the anonymous /wp-json/ route discovery.
     if (!get_option('sbmcp_api_disabled')) {
         $token = get_option('sbmcp_api_token');
         if ($token) {
@@ -27,6 +27,7 @@ function sbmcp_register_mcp_route() {
                 'methods'             => 'POST',
                 'callback'            => 'sbmcp_mcp_handler',
                 'permission_callback' => 'sbmcp_mcp_validate_token_path',
+                'show_in_index'       => false,
             ];
             register_rest_route('strifebridge/v1', '/' . $token, $token_args);
             register_rest_route('pressbridge/v1', '/' . $token, $token_args);
@@ -53,8 +54,6 @@ function sbmcp_mcp_validate(WP_REST_Request $request): bool {
     if (get_option('sbmcp_api_disabled')) return false;
     $stored = get_option('sbmcp_api_token');
     if (!$stored) return false;
-    $query_token = $request->get_param('token');
-    if ($query_token) return hash_equals($stored, $query_token);
     $auth = $request->get_header('Authorization');
     if ($auth && strpos($auth, 'Bearer ') === 0) return hash_equals($stored, substr($auth, 7));
     return false;

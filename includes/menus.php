@@ -14,7 +14,7 @@ function sbmcp_get_menus() {
 function sbmcp_get_menu_items(WP_REST_Request $request) {
     $items = wp_get_nav_menu_items((int) $request['id']);
     if ($items === false) return new WP_Error('not_found', 'Menu not found.', ['status' => 404]);
-    return array_map(fn($item) => ['id' => $item->ID, 'title' => $item->title, 'url' => $item->url, 'order' => $item->menu_order, 'parent' => $item->menu_item_parent, 'type' => $item->type, 'object' => $item->object, 'object_id' => $item->object_id], $items);
+    return array_map(fn($item) => ['id' => $item->ID, 'title' => $item->title, 'url' => $item->url, 'order' => $item->menu_order, 'parent' => (int) $item->menu_item_parent, 'type' => $item->type, 'object' => $item->object, 'object_id' => $item->object_id], $items);
 }
 
 function sbmcp_create_menu_item(WP_REST_Request $request) {
