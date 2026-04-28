@@ -136,7 +136,7 @@ function sbmcp_settings_page() {
 
         <div class="sb-links">
             <a href="https://strifetech.com" target="_blank">Strife Technologies</a>
-            <a href="https://strifetech.com/strifebridge-mcp-pro" target="_blank">Pro</a>
+            <a href="https://strifetech.com/strifebridge-mcp/#pricing" target="_blank">Pro</a>
             <a href="https://strifetech.com/blog" target="_blank">Blog</a>
             <a href="https://github.com/strifero/strifebridge-mcp/issues" target="_blank">Support</a>
             <a href="https://strifetech.com/docs/strifebridge-mcp" target="_blank">Docs</a>
@@ -211,7 +211,7 @@ function sbmcp_settings_page() {
                         <li>Priority support</li>
                     </ul>
                     <br>
-                    <a href="https://strifetech.com/strifebridge-mcp-pro" target="_blank" class="sb-promo-btn">Get StrifeBridge MCP Pro</a>
+                    <a href="https://strifetech.com/strifebridge-mcp/#pricing" target="_blank" class="sb-promo-btn">Get StrifeBridge MCP Pro</a>
                 </div>
                 <div class="sb-sidebar-card">
                     <h3>Community</h3>
