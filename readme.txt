@@ -65,7 +65,7 @@ StrifeBridge MCP exposes extension hooks that let add-on plugins register additi
 
 == Installation ==
 
-1. Upload the plugin files to the `/wp-content/plugins/strifebridge-mcp-for-wordpress` directory, or install the plugin through the WordPress Plugins screen directly
+1. Upload the plugin files to the `/wp-content/plugins/strifebridge-mcp` directory, or install the plugin through the WordPress Plugins screen directly
 2. Activate the plugin through the Plugins screen in WordPress
 3. Go to Settings &rarr; StrifeBridge MCP to get your Connector URL
 4. Paste the Connector URL into Claude.ai (Settings &rarr; Integrations &rarr; Add custom connector) or your preferred MCP-capable AI tool

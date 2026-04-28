@@ -9,8 +9,8 @@ if (!defined('ABSPATH')) {
 
 function sbmcp_admin_menu() {
     $hook = add_options_page(
-        __('StrifeBridge MCP', 'strifebridge-mcp-for-wordpress'),
-        __('StrifeBridge MCP', 'strifebridge-mcp-for-wordpress'),
+        __('StrifeBridge MCP', 'strifebridge-mcp'),
+        __('StrifeBridge MCP', 'strifebridge-mcp'),
         'manage_options',
         'strifebridge-mcp',
         'sbmcp_settings_page'
@@ -41,7 +41,7 @@ function sbmcp_enqueue_admin_assets() {
 function sbmcp_handle_regenerate() {
     if (!isset($_POST['sbmcp_regenerate'])) return;
     check_admin_referer('sbmcp_regenerate_token');
-    if (!current_user_can('manage_options')) wp_die(esc_html__('Unauthorized', 'strifebridge-mcp-for-wordpress'));
+    if (!current_user_can('manage_options')) wp_die(esc_html__('Unauthorized', 'strifebridge-mcp'));
     update_option('sbmcp_api_token', bin2hex(random_bytes(32)));
     wp_safe_redirect(admin_url('options-general.php?page=strifebridge-mcp&regenerated=1')); exit;
 }
@@ -50,7 +50,7 @@ add_action('admin_init', 'sbmcp_handle_regenerate');
 function sbmcp_handle_lockdown() {
     if (!isset($_POST['sbmcp_lockdown_action'])) return;
     check_admin_referer('sbmcp_lockdown');
-    if (!current_user_can('manage_options')) wp_die(esc_html__('Unauthorized', 'strifebridge-mcp-for-wordpress'));
+    if (!current_user_can('manage_options')) wp_die(esc_html__('Unauthorized', 'strifebridge-mcp'));
     $disabling = $_POST['sbmcp_lockdown_action'] === 'disable';
     update_option('sbmcp_api_disabled', $disabling ? 1 : 0);
     wp_safe_redirect(admin_url('options-general.php?page=strifebridge-mcp&' . ($disabling ? 'api_disabled=1' : 'api_enabled=1'))); exit;
@@ -60,7 +60,7 @@ add_action('admin_init', 'sbmcp_handle_lockdown');
 function sbmcp_handle_tool_toggles() {
     if (!isset($_POST['sbmcp_save_tools'])) return;
     check_admin_referer('sbmcp_tool_toggles');
-    if (!current_user_can('manage_options')) wp_die(esc_html__('Unauthorized', 'strifebridge-mcp-for-wordpress'));
+    if (!current_user_can('manage_options')) wp_die(esc_html__('Unauthorized', 'strifebridge-mcp'));
 
     $groups   = array_keys(sbmcp_tool_groups());
     $enabled  = isset($_POST['sbmcp_tools']) && is_array($_POST['sbmcp_tools'])
@@ -75,7 +75,7 @@ add_action('admin_init', 'sbmcp_handle_tool_toggles');
 function sbmcp_handle_dismiss_review() {
     if (!isset($_POST['sbmcp_dismiss_review'])) return;
     check_admin_referer('sbmcp_dismiss_review');
-    if (!current_user_can('manage_options')) wp_die(esc_html__('Unauthorized', 'strifebridge-mcp-for-wordpress'));
+    if (!current_user_can('manage_options')) wp_die(esc_html__('Unauthorized', 'strifebridge-mcp'));
     $action = sanitize_key($_POST['sbmcp_dismiss_review']);
     if ($action === 'later') {
         update_option('sbmcp_review_remind_at', time() + (7 * DAY_IN_SECONDS));
@@ -107,8 +107,8 @@ function sbmcp_settings_page() {
     $review_remind_at = (int) get_option('sbmcp_review_remind_at', 0);
     $show_review = !$review_dismissed && $days_active >= 7 && (!$review_remind_at || time() >= $review_remind_at);
 
-    $copy_label  = __('Copy', 'strifebridge-mcp-for-wordpress');
-    $copied_label = __('Copied!', 'strifebridge-mcp-for-wordpress');
+    $copy_label  = __('Copy', 'strifebridge-mcp');
+    $copied_label = __('Copied!', 'strifebridge-mcp');
     ?>
     <div class="wrap sb-wrap">
 
@@ -118,62 +118,62 @@ function sbmcp_settings_page() {
                 <?php
                 printf(
                     /* translators: %s: number of days the plugin has been active. */
-                    esc_html__('StrifeBridge MCP has been running for %s days. Enjoying it? A quick review helps other WordPress users discover it.', 'strifebridge-mcp-for-wordpress'),
+                    esc_html__('StrifeBridge MCP has been running for %s days. Enjoying it? A quick review helps other WordPress users discover it.', 'strifebridge-mcp'),
                     '<strong>' . esc_html($days_active) . '</strong>'
                 );
                 ?>
             </p>
             <div class="sb-review-actions">
-                <a href="https://wordpress.org/support/plugin/strifebridge-mcp-for-wordpress/reviews/#new-post" target="_blank" rel="noopener" class="button button-primary sb-nowrap"><?php esc_html_e('Leave a Review', 'strifebridge-mcp-for-wordpress'); ?></a>
-                <form method="post" class="sb-form-inline"><?php wp_nonce_field('sbmcp_dismiss_review'); ?><button type="submit" name="sbmcp_dismiss_review" value="later" class="button"><?php esc_html_e('Maybe Later', 'strifebridge-mcp-for-wordpress'); ?></button></form>
-                <form method="post" class="sb-form-inline"><?php wp_nonce_field('sbmcp_dismiss_review'); ?><button type="submit" name="sbmcp_dismiss_review" value="never" class="button sb-muted"><?php esc_html_e('Never', 'strifebridge-mcp-for-wordpress'); ?></button></form>
+                <a href="https://wordpress.org/support/plugin/strifebridge-mcp/reviews/#new-post" target="_blank" rel="noopener" class="button button-primary sb-nowrap"><?php esc_html_e('Leave a Review', 'strifebridge-mcp'); ?></a>
+                <form method="post" class="sb-form-inline"><?php wp_nonce_field('sbmcp_dismiss_review'); ?><button type="submit" name="sbmcp_dismiss_review" value="later" class="button"><?php esc_html_e('Maybe Later', 'strifebridge-mcp'); ?></button></form>
+                <form method="post" class="sb-form-inline"><?php wp_nonce_field('sbmcp_dismiss_review'); ?><button type="submit" name="sbmcp_dismiss_review" value="never" class="button sb-muted"><?php esc_html_e('Never', 'strifebridge-mcp'); ?></button></form>
             </div>
         </div>
         <?php endif; ?>
 
         <div class="sb-header">
             <div>
-                <h1><?php esc_html_e('StrifeBridge MCP', 'strifebridge-mcp-for-wordpress'); ?></h1>
-                <p><?php esc_html_e('AI bridge for WordPress — MCP server & REST API', 'strifebridge-mcp-for-wordpress'); ?></p>
+                <h1><?php esc_html_e('StrifeBridge MCP', 'strifebridge-mcp'); ?></h1>
+                <p><?php esc_html_e('AI bridge for WordPress — MCP server & REST API', 'strifebridge-mcp'); ?></p>
             </div>
             <div class="sb-header-right">
                 <?php if ($api_disabled): ?>
-                    <span class="sb-badge sb-badge-disabled"><?php esc_html_e('API Disabled', 'strifebridge-mcp-for-wordpress'); ?></span>
+                    <span class="sb-badge sb-badge-disabled"><?php esc_html_e('API Disabled', 'strifebridge-mcp'); ?></span>
                 <?php else: ?>
-                    <span class="sb-badge"><?php esc_html_e('Active', 'strifebridge-mcp-for-wordpress'); ?></span>
+                    <span class="sb-badge"><?php esc_html_e('Active', 'strifebridge-mcp'); ?></span>
                 <?php endif; ?>
                 <div class="sb-version">
                     <?php
                     /* translators: %s: plugin version number. */
-                    printf(esc_html__('v%s', 'strifebridge-mcp-for-wordpress'), esc_html($version));
+                    printf(esc_html__('v%s', 'strifebridge-mcp'), esc_html($version));
                     ?>
                 </div>
             </div>
         </div>
 
         <div class="sb-links">
-            <a href="https://strifetech.com" target="_blank" rel="noopener"><?php esc_html_e('Strife Technologies', 'strifebridge-mcp-for-wordpress'); ?></a>
-            <a href="https://strifetech.com/strifebridge-mcp/#pricing" target="_blank" rel="noopener"><?php esc_html_e('Pro', 'strifebridge-mcp-for-wordpress'); ?></a>
-            <a href="https://strifetech.com/blog" target="_blank" rel="noopener"><?php esc_html_e('Blog', 'strifebridge-mcp-for-wordpress'); ?></a>
-            <a href="https://github.com/strifero/strifebridge-mcp/issues" target="_blank" rel="noopener"><?php esc_html_e('Support', 'strifebridge-mcp-for-wordpress'); ?></a>
-            <a href="https://strifetech.com/docs/strifebridge-mcp" target="_blank" rel="noopener"><?php esc_html_e('Docs', 'strifebridge-mcp-for-wordpress'); ?></a>
+            <a href="https://strifetech.com" target="_blank" rel="noopener"><?php esc_html_e('Strife Technologies', 'strifebridge-mcp'); ?></a>
+            <a href="https://strifetech.com/strifebridge-mcp/#pricing" target="_blank" rel="noopener"><?php esc_html_e('Pro', 'strifebridge-mcp'); ?></a>
+            <a href="https://strifetech.com/blog" target="_blank" rel="noopener"><?php esc_html_e('Blog', 'strifebridge-mcp'); ?></a>
+            <a href="https://github.com/strifero/strifebridge-mcp/issues" target="_blank" rel="noopener"><?php esc_html_e('Support', 'strifebridge-mcp'); ?></a>
+            <a href="https://strifetech.com/docs/strifebridge-mcp" target="_blank" rel="noopener"><?php esc_html_e('Docs', 'strifebridge-mcp'); ?></a>
         </div>
 
-        <?php if ($api_disabled): ?><div class="notice notice-error"><p><strong><?php esc_html_e('StrifeBridge MCP API is disabled.', 'strifebridge-mcp-for-wordpress'); ?></strong> <?php esc_html_e('Re-enable in the Danger Zone below.', 'strifebridge-mcp-for-wordpress'); ?></p></div><?php endif; ?>
-        <?php if ($api_just_disabled): ?><div class="notice notice-warning is-dismissible"><p><strong><?php esc_html_e('API disabled.', 'strifebridge-mcp-for-wordpress'); ?></strong></p></div><?php endif; ?>
-        <?php if ($api_just_enabled): ?><div class="notice notice-success is-dismissible"><p><strong><?php esc_html_e('API re-enabled.', 'strifebridge-mcp-for-wordpress'); ?></strong></p></div><?php endif; ?>
-        <?php if ($regenerated): ?><div class="notice notice-success is-dismissible"><p><strong><?php esc_html_e('Token regenerated.', 'strifebridge-mcp-for-wordpress'); ?></strong> <?php esc_html_e('Update your connector URL in Claude.ai.', 'strifebridge-mcp-for-wordpress'); ?></p></div><?php endif; ?>
-        <?php if ($tools_saved): ?><div class="notice notice-success is-dismissible"><p><strong><?php esc_html_e('Tool settings saved.', 'strifebridge-mcp-for-wordpress'); ?></strong></p></div><?php endif; ?>
+        <?php if ($api_disabled): ?><div class="notice notice-error"><p><strong><?php esc_html_e('StrifeBridge MCP API is disabled.', 'strifebridge-mcp'); ?></strong> <?php esc_html_e('Re-enable in the Danger Zone below.', 'strifebridge-mcp'); ?></p></div><?php endif; ?>
+        <?php if ($api_just_disabled): ?><div class="notice notice-warning is-dismissible"><p><strong><?php esc_html_e('API disabled.', 'strifebridge-mcp'); ?></strong></p></div><?php endif; ?>
+        <?php if ($api_just_enabled): ?><div class="notice notice-success is-dismissible"><p><strong><?php esc_html_e('API re-enabled.', 'strifebridge-mcp'); ?></strong></p></div><?php endif; ?>
+        <?php if ($regenerated): ?><div class="notice notice-success is-dismissible"><p><strong><?php esc_html_e('Token regenerated.', 'strifebridge-mcp'); ?></strong> <?php esc_html_e('Update your connector URL in Claude.ai.', 'strifebridge-mcp'); ?></p></div><?php endif; ?>
+        <?php if ($tools_saved): ?><div class="notice notice-success is-dismissible"><p><strong><?php esc_html_e('Tool settings saved.', 'strifebridge-mcp'); ?></strong></p></div><?php endif; ?>
 
         <div class="sb-layout">
             <div class="sb-main">
 
                 <!-- Claude.ai Connector -->
                 <div class="sb-card">
-                    <h2><?php esc_html_e('Claude.ai Connector', 'strifebridge-mcp-for-wordpress'); ?></h2>
-                    <p><?php esc_html_e('Copy the URL below and paste it into Claude.ai → Settings → Integrations → Add custom connector.', 'strifebridge-mcp-for-wordpress'); ?></p>
+                    <h2><?php esc_html_e('Claude.ai Connector', 'strifebridge-mcp'); ?></h2>
+                    <p><?php esc_html_e('Copy the URL below and paste it into Claude.ai → Settings → Integrations → Add custom connector.', 'strifebridge-mcp'); ?></p>
                     <div class="sb-field">
-                        <label for="sb-mcp-url"><?php esc_html_e('Connector URL', 'strifebridge-mcp-for-wordpress'); ?></label>
+                        <label for="sb-mcp-url"><?php esc_html_e('Connector URL', 'strifebridge-mcp'); ?></label>
                         <div class="sb-input-row">
                             <input type="text" id="sb-mcp-url" value="<?php echo esc_attr($mcp_url_tok); ?>" class="large-text" readonly />
                             <button type="button" class="button button-primary" data-sb-copy="sb-mcp-url" data-label="<?php echo esc_attr($copy_label); ?>" data-copied="<?php echo esc_attr($copied_label); ?>"><?php echo esc_html($copy_label); ?></button>
@@ -181,7 +181,7 @@ function sbmcp_settings_page() {
                     </div>
                     <hr class="sb-divider">
                     <div class="sb-field">
-                        <label for="sb-token"><?php esc_html_e('Bearer Token', 'strifebridge-mcp-for-wordpress'); ?> <span class="sb-tool-desc">(<?php esc_html_e('for direct API use', 'strifebridge-mcp-for-wordpress'); ?>)</span></label>
+                        <label for="sb-token"><?php esc_html_e('Bearer Token', 'strifebridge-mcp'); ?> <span class="sb-tool-desc">(<?php esc_html_e('for direct API use', 'strifebridge-mcp'); ?>)</span></label>
                         <div class="sb-input-row">
                             <input type="text" id="sb-token" value="<?php echo esc_attr($token); ?>" class="regular-text" readonly />
                             <button type="button" class="button" data-sb-copy="sb-token" data-label="<?php echo esc_attr($copy_label); ?>" data-copied="<?php echo esc_attr($copied_label); ?>"><?php echo esc_html($copy_label); ?></button>
@@ -191,8 +191,8 @@ function sbmcp_settings_page() {
 
                 <!-- Tool Settings -->
                 <div class="sb-card">
-                    <h2><?php esc_html_e('Tool Settings', 'strifebridge-mcp-for-wordpress'); ?></h2>
-                    <p><?php esc_html_e('Enable or disable individual tool groups. Disabled tools are removed from the MCP server and REST API entirely — Claude will not be able to see or call them.', 'strifebridge-mcp-for-wordpress'); ?></p>
+                    <h2><?php esc_html_e('Tool Settings', 'strifebridge-mcp'); ?></h2>
+                    <p><?php esc_html_e('Enable or disable individual tool groups. Disabled tools are removed from the MCP server and REST API entirely — Claude will not be able to see or call them.', 'strifebridge-mcp'); ?></p>
                     <form method="post">
                         <?php wp_nonce_field('sbmcp_tool_toggles'); ?>
                         <div class="sb-tools-grid">
@@ -211,29 +211,29 @@ function sbmcp_settings_page() {
                             </label>
                             <?php endforeach; ?>
                         </div>
-                        <button type="submit" name="sbmcp_save_tools" class="button button-primary"><?php esc_html_e('Save Tool Settings', 'strifebridge-mcp-for-wordpress'); ?></button>
+                        <button type="submit" name="sbmcp_save_tools" class="button button-primary"><?php esc_html_e('Save Tool Settings', 'strifebridge-mcp'); ?></button>
                     </form>
                 </div>
 
                 <!-- Danger Zone -->
                 <div class="sb-card sb-danger">
-                    <h2><?php esc_html_e('Danger Zone', 'strifebridge-mcp-for-wordpress'); ?></h2>
-                    <p><strong><?php esc_html_e('Emergency Lockdown', 'strifebridge-mcp-for-wordpress'); ?></strong> — <?php esc_html_e('instantly disables all API and MCP access without changing the token.', 'strifebridge-mcp-for-wordpress'); ?></p>
-                    <form method="post" class="sb-mb-20" data-sb-confirm="<?php echo esc_attr($api_disabled ? __('Re-enable the StrifeBridge MCP API?', 'strifebridge-mcp-for-wordpress') : __('Disable the entire StrifeBridge MCP API?', 'strifebridge-mcp-for-wordpress')); ?>">
+                    <h2><?php esc_html_e('Danger Zone', 'strifebridge-mcp'); ?></h2>
+                    <p><strong><?php esc_html_e('Emergency Lockdown', 'strifebridge-mcp'); ?></strong> — <?php esc_html_e('instantly disables all API and MCP access without changing the token.', 'strifebridge-mcp'); ?></p>
+                    <form method="post" class="sb-mb-20" data-sb-confirm="<?php echo esc_attr($api_disabled ? __('Re-enable the StrifeBridge MCP API?', 'strifebridge-mcp') : __('Disable the entire StrifeBridge MCP API?', 'strifebridge-mcp')); ?>">
                         <?php wp_nonce_field('sbmcp_lockdown'); ?>
                         <?php if ($api_disabled): ?>
                             <input type="hidden" name="sbmcp_lockdown_action" value="enable" />
-                            <button type="submit" class="button button-primary"><?php esc_html_e('Re-enable API', 'strifebridge-mcp-for-wordpress'); ?></button>
+                            <button type="submit" class="button button-primary"><?php esc_html_e('Re-enable API', 'strifebridge-mcp'); ?></button>
                         <?php else: ?>
                             <input type="hidden" name="sbmcp_lockdown_action" value="disable" />
-                            <button type="submit" class="button button-secondary sb-danger-btn"><?php esc_html_e('Disable API', 'strifebridge-mcp-for-wordpress'); ?></button>
+                            <button type="submit" class="button button-secondary sb-danger-btn"><?php esc_html_e('Disable API', 'strifebridge-mcp'); ?></button>
                         <?php endif; ?>
                     </form>
                     <hr class="sb-divider">
-                    <p><?php esc_html_e('Regenerating the token will invalidate your current connector URL.', 'strifebridge-mcp-for-wordpress'); ?></p>
-                    <form method="post" data-sb-confirm="<?php echo esc_attr__('Regenerate token?', 'strifebridge-mcp-for-wordpress'); ?>">
+                    <p><?php esc_html_e('Regenerating the token will invalidate your current connector URL.', 'strifebridge-mcp'); ?></p>
+                    <form method="post" data-sb-confirm="<?php echo esc_attr__('Regenerate token?', 'strifebridge-mcp'); ?>">
                         <?php wp_nonce_field('sbmcp_regenerate_token'); ?>
-                        <button type="submit" name="sbmcp_regenerate" class="button button-secondary sb-danger-btn"><?php esc_html_e('Regenerate Token', 'strifebridge-mcp-for-wordpress'); ?></button>
+                        <button type="submit" name="sbmcp_regenerate" class="button button-secondary sb-danger-btn"><?php esc_html_e('Regenerate Token', 'strifebridge-mcp'); ?></button>
                     </form>
                 </div>
 
@@ -242,33 +242,33 @@ function sbmcp_settings_page() {
             <!-- Sidebar -->
             <div class="sb-sidebar">
                 <div class="sb-sidebar-card">
-                    <h3><?php esc_html_e('Take StrifeBridge to the Next Level', 'strifebridge-mcp-for-wordpress'); ?></h3>
+                    <h3><?php esc_html_e('Take StrifeBridge to the Next Level', 'strifebridge-mcp'); ?></h3>
                     <ul>
-                        <li><?php esc_html_e('Theme file editing', 'strifebridge-mcp-for-wordpress'); ?></li>
-                        <li><?php esc_html_e('Plugin file editing', 'strifebridge-mcp-for-wordpress'); ?></li>
-                        <li><?php esc_html_e('Database access', 'strifebridge-mcp-for-wordpress'); ?></li>
-                        <li><?php esc_html_e('User management', 'strifebridge-mcp-for-wordpress'); ?></li>
-                        <li><?php esc_html_e('Error log & cron', 'strifebridge-mcp-for-wordpress'); ?></li>
-                        <li><?php esc_html_e('Priority support', 'strifebridge-mcp-for-wordpress'); ?></li>
+                        <li><?php esc_html_e('Theme file editing', 'strifebridge-mcp'); ?></li>
+                        <li><?php esc_html_e('Plugin file editing', 'strifebridge-mcp'); ?></li>
+                        <li><?php esc_html_e('Database access', 'strifebridge-mcp'); ?></li>
+                        <li><?php esc_html_e('User management', 'strifebridge-mcp'); ?></li>
+                        <li><?php esc_html_e('Error log & cron', 'strifebridge-mcp'); ?></li>
+                        <li><?php esc_html_e('Priority support', 'strifebridge-mcp'); ?></li>
                     </ul>
                     <br>
-                    <a href="https://strifetech.com/strifebridge-mcp/#pricing" target="_blank" rel="noopener" class="sb-promo-btn"><?php esc_html_e('Get StrifeBridge MCP Pro', 'strifebridge-mcp-for-wordpress'); ?></a>
+                    <a href="https://strifetech.com/strifebridge-mcp/#pricing" target="_blank" rel="noopener" class="sb-promo-btn"><?php esc_html_e('Get StrifeBridge MCP Pro', 'strifebridge-mcp'); ?></a>
                 </div>
                 <div class="sb-sidebar-card">
-                    <h3><?php esc_html_e('Community', 'strifebridge-mcp-for-wordpress'); ?></h3>
-                    <p><a href="https://github.com/strifero/strifebridge-mcp/discussions" target="_blank" rel="noopener"><?php esc_html_e('GitHub Discussions', 'strifebridge-mcp-for-wordpress'); ?></a></p>
+                    <h3><?php esc_html_e('Community', 'strifebridge-mcp'); ?></h3>
+                    <p><a href="https://github.com/strifero/strifebridge-mcp/discussions" target="_blank" rel="noopener"><?php esc_html_e('GitHub Discussions', 'strifebridge-mcp'); ?></a></p>
                 </div>
                 <div class="sb-sidebar-card">
-                    <h3><?php esc_html_e('Getting Started', 'strifebridge-mcp-for-wordpress'); ?></h3>
-                    <p><a href="https://strifetech.com/docs/strifebridge-mcp" target="_blank" rel="noopener"><?php esc_html_e('Read the docs', 'strifebridge-mcp-for-wordpress'); ?></a></p>
+                    <h3><?php esc_html_e('Getting Started', 'strifebridge-mcp'); ?></h3>
+                    <p><a href="https://strifetech.com/docs/strifebridge-mcp" target="_blank" rel="noopener"><?php esc_html_e('Read the docs', 'strifebridge-mcp'); ?></a></p>
                 </div>
                 <div class="sb-sidebar-card">
-                    <h3><?php esc_html_e('Support', 'strifebridge-mcp-for-wordpress'); ?></h3>
-                    <p><a href="https://github.com/strifero/strifebridge-mcp/issues" target="_blank" rel="noopener"><?php esc_html_e('Report an issue', 'strifebridge-mcp-for-wordpress'); ?></a></p>
+                    <h3><?php esc_html_e('Support', 'strifebridge-mcp'); ?></h3>
+                    <p><a href="https://github.com/strifero/strifebridge-mcp/issues" target="_blank" rel="noopener"><?php esc_html_e('Report an issue', 'strifebridge-mcp'); ?></a></p>
                 </div>
                 <div class="sb-sidebar-card">
-                    <h3><?php esc_html_e('Submit a Review', 'strifebridge-mcp-for-wordpress'); ?></h3>
-                    <p><a href="https://wordpress.org/support/plugin/strifebridge-mcp-for-wordpress/reviews/#new-post" target="_blank" rel="noopener"><?php esc_html_e('Leave a review on wp.org', 'strifebridge-mcp-for-wordpress'); ?></a></p>
+                    <h3><?php esc_html_e('Submit a Review', 'strifebridge-mcp'); ?></h3>
+                    <p><a href="https://wordpress.org/support/plugin/strifebridge-mcp/reviews/#new-post" target="_blank" rel="noopener"><?php esc_html_e('Leave a review on wp.org', 'strifebridge-mcp'); ?></a></p>
                 </div>
             </div>
         </div>

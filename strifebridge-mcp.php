@@ -8,7 +8,7 @@
  * Author URI:  https://strifetech.com
  * License:     GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain: strifebridge-mcp-for-wordpress
+ * Text Domain: strifebridge-mcp
  * Requires at least: 5.6
  * Requires PHP: 7.4
  */
@@ -42,7 +42,7 @@ function sbmcp_activate() {
 
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'sbmcp_action_links');
 function sbmcp_action_links($links) {
-    array_unshift($links, '<a href="' . admin_url('options-general.php?page=strifebridge-mcp') . '">' . __('Settings', 'strifebridge-mcp-for-wordpress') . '</a>');
+    array_unshift($links, '<a href="' . admin_url('options-general.php?page=strifebridge-mcp') . '">' . __('Settings', 'strifebridge-mcp') . '</a>');
     return $links;
 }
 
