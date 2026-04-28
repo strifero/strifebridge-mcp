@@ -38,6 +38,9 @@ function sbmcp_activate() {
     if (!get_option('sbmcp_api_token')) {
         update_option('sbmcp_api_token', bin2hex(random_bytes(32)));
     }
+    if (!get_option('sbmcp_activated_at')) {
+        update_option('sbmcp_activated_at', time());
+    }
 }
 
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'sbmcp_action_links');

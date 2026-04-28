@@ -15,6 +15,7 @@ define('SBMCP_OPTIONS_BLACKLIST', [
     'siteurl', 'home', 'admin_email',
     'default_role', 'users_can_register',
     'mailserver_url', 'mailserver_login', 'mailserver_pass',
+    'wp_user_roles', 'db_version', 'cron',
 ]);
 
 /**
@@ -27,6 +28,8 @@ const SBMCP_OPTIONS_SENSITIVE_PATTERNS = [
     '/token/i',
     '/password/i',
     '/_pass$/i',
+    '/_user_roles$/i',
+    '/_capabilities$/i',
 ];
 
 function sbmcp_option_is_allowed(string $key): bool {

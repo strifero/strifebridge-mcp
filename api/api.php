@@ -22,12 +22,14 @@ function sbmcp_filter_public_meta(array $meta): array {
 }
 
 function sbmcp_get_posts(WP_REST_Request $request): array {
-    $posts = get_posts(['numberposts' => (int) ($request->get_param('per_page') ?? 50), 'post_status' => $request->get_param('status') ?? 'publish', 'post_type' => $request->get_param('type') ?? 'post']);
+    $per_page = min(max((int) ($request->get_param('per_page') ?? 50), 1), 200);
+    $posts = get_posts(['numberposts' => $per_page, 'post_status' => $request->get_param('status') ?? 'publish', 'post_type' => $request->get_param('type') ?? 'post']);
     return array_map(fn($p) => ['id' => $p->ID, 'title' => $p->post_title, 'status' => $p->post_status, 'date' => $p->post_date, 'url' => get_permalink($p->ID)], $posts);
 }
 
 function sbmcp_get_pages(WP_REST_Request $request): array {
-    $pages = get_posts(['numberposts' => (int) ($request->get_param('per_page') ?? 50), 'post_status' => $request->get_param('status') ?? 'publish', 'post_type' => 'page']);
+    $per_page = min(max((int) ($request->get_param('per_page') ?? 50), 1), 200);
+    $pages = get_posts(['numberposts' => $per_page, 'post_status' => $request->get_param('status') ?? 'publish', 'post_type' => 'page']);
     return array_map(fn($p) => ['id' => $p->ID, 'title' => $p->post_title, 'status' => $p->post_status, 'date' => $p->post_date, 'url' => get_permalink($p->ID)], $pages);
 }
 

@@ -280,7 +280,7 @@ function sbmcp_mcp_tools_call($id, $params) {
             }
             if (in_array('meta', (array) $include, true)) {
                 $snapshot['meta'] = [];
-                foreach (get_post_meta($pid) as $key => $value) {
+                foreach (sbmcp_filter_public_meta(get_post_meta($pid)) as $key => $value) {
                     $snapshot['meta'][$key] = count($value) === 1 ? maybe_unserialize($value[0]) : array_map('maybe_unserialize', $value);
                 }
             }
