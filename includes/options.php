@@ -44,6 +44,7 @@ function sbmcp_get_option(WP_REST_Request $request) {
     $key = $request->get_param('key');
     if (!$key) return new WP_Error('missing_key', 'Provide an option key.', ['status' => 400]);
     if (!sbmcp_option_is_allowed($key)) return new WP_Error('forbidden', 'This option cannot be accessed via the API.', ['status' => 403]);
+    if (sbmcp_option_is_sensitive($key)) return new WP_Error('forbidden', 'This option key matches a sensitive pattern (key/secret/token/password) and cannot be read via the API.', ['status' => 403]);
     $value = get_option($key);
     if ($value === false) return new WP_Error('not_found', 'Option not found.', ['status' => 404]);
     return ['key' => $key, 'value' => $value];

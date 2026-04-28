@@ -51,7 +51,7 @@ function sbmcp_handle_lockdown() {
     if (!isset($_POST['sbmcp_lockdown_action'])) return;
     check_admin_referer('sbmcp_lockdown');
     if (!current_user_can('manage_options')) wp_die(esc_html__('Unauthorized', 'strifebridge-mcp'));
-    $disabling = $_POST['sbmcp_lockdown_action'] === 'disable';
+    $disabling = sanitize_key(wp_unslash($_POST['sbmcp_lockdown_action'])) === 'disable';
     update_option('sbmcp_api_disabled', $disabling ? 1 : 0);
     wp_safe_redirect(admin_url('options-general.php?page=strifebridge-mcp&' . ($disabling ? 'api_disabled=1' : 'api_enabled=1'))); exit;
 }
@@ -64,7 +64,7 @@ function sbmcp_handle_tool_toggles() {
 
     $groups   = array_keys(sbmcp_tool_groups());
     $enabled  = isset($_POST['sbmcp_tools']) && is_array($_POST['sbmcp_tools'])
-                    ? array_map('sanitize_key', $_POST['sbmcp_tools'])
+                    ? array_map('sanitize_key', wp_unslash($_POST['sbmcp_tools']))
                     : [];
     $disabled = array_values(array_diff($groups, $enabled));
     update_option('sbmcp_disabled_tools', $disabled);
@@ -76,7 +76,7 @@ function sbmcp_handle_dismiss_review() {
     if (!isset($_POST['sbmcp_dismiss_review'])) return;
     check_admin_referer('sbmcp_dismiss_review');
     if (!current_user_can('manage_options')) wp_die(esc_html__('Unauthorized', 'strifebridge-mcp'));
-    $action = sanitize_key($_POST['sbmcp_dismiss_review']);
+    $action = sanitize_key(wp_unslash($_POST['sbmcp_dismiss_review']));
     if ($action === 'later') {
         update_option('sbmcp_review_remind_at', time() + (7 * DAY_IN_SECONDS));
     } elseif ($action === 'never') {
