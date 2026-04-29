@@ -1,4 +1,4 @@
-=== StrifeBridge MCP for WordPress ===
+=== StrifeBridge MCP ===
 Contributors: strifero
 Tags: mcp, claude, ai, automation, rest-api
 Requires at least: 5.6

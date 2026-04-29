@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: StrifeBridge MCP for WordPress
+ * Plugin Name: StrifeBridge MCP
  * Plugin URI:  https://strifetech.com/strifebridge-mcp
  * Description: Connect your WordPress site to Claude and other AI models via a secure MCP server and REST API.
  * Version:     2.0.0
