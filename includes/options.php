@@ -33,6 +33,15 @@ const SBMCP_OPTIONS_SENSITIVE_PATTERNS = [
 ];
 
 function sbmcp_option_is_allowed(string $key): bool {
+    // Guard every plugin-internal option. The sbmcp_ prefixed options store the
+    // API token, lockdown state, tool-group toggles, and the abilities switch.
+    // Letting the options tool read or write them would let a token holder undo
+    // the controls an administrator configured (for example switching a disabled
+    // tool group back on, or clearing sbmcp_abilities_disabled). None of these
+    // are legitimately reachable through the generic options tool.
+    if (strpos($key, 'sbmcp_') === 0) {
+        return false;
+    }
     return !in_array($key, SBMCP_OPTIONS_BLACKLIST, true);
 }
 
@@ -89,7 +98,7 @@ function sbmcp_list_options(WP_REST_Request $request) {
         // Pattern mode (existing behavior).
         $pattern = $request->get_param('pattern') ?? '%';
         $rows    = $wpdb->get_results($wpdb->prepare("SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_name LIMIT 100", $pattern), ARRAY_A);
-        $rows    = array_values(array_filter($rows ?: [], fn($r) => !in_array($r['option_name'], SBMCP_OPTIONS_BLACKLIST, true) && !sbmcp_option_is_sensitive($r['option_name'])));
+        $rows    = array_values(array_filter($rows ?: [], fn($r) => sbmcp_option_is_allowed($r['option_name']) && !sbmcp_option_is_sensitive($r['option_name'])));
     }
 
     // Cap large values so giant serialized transients don't blow past response size.
