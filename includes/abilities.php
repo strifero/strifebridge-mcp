@@ -34,6 +34,48 @@ if (!defined('ABSPATH')) {
  *
  * @return array
  */
+add_action('wp_abilities_api_categories_init', 'sbmcp_register_ability_categories');
+
+/**
+ * Register the ability categories StrifeBridge tools are grouped under.
+ *
+ * Core only registers the "site" and "user" categories, and the Abilities API
+ * rejects any ability whose category is not registered, so the categories used
+ * in sbmcp_ability_map() must be registered here first.
+ *
+ * @return void
+ */
+function sbmcp_register_ability_categories() {
+    if (!function_exists('wp_register_ability_category')) {
+        return;
+    }
+
+    $categories = array(
+        'content'  => 'Content',
+        'media'    => 'Media',
+        'options'  => 'Options',
+        'users'    => 'Users',
+        'plugins'  => 'Plugins',
+        'menus'    => 'Menus',
+        'taxonomy' => 'Taxonomy',
+        'widgets'  => 'Widgets',
+        'system'   => 'System',
+    );
+
+    foreach ($categories as $slug => $label) {
+        if (function_exists('wp_has_ability_category') && wp_has_ability_category($slug)) {
+            continue;
+        }
+        wp_register_ability_category(
+            $slug,
+            array(
+                'label'       => $label,
+                'description' => sprintf('StrifeBridge %s tools.', $label),
+            )
+        );
+    }
+}
+
 function sbmcp_ability_map(): array {
     return array(
         // Posts and pages.
