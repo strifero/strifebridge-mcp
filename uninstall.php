@@ -11,6 +11,7 @@ if (!defined('WP_UNINSTALL_PLUGIN')) {
 delete_option('sbmcp_api_token');
 delete_option('sbmcp_api_disabled');
 delete_option('sbmcp_disabled_tools');
+delete_option('sbmcp_abilities_disabled');
 delete_option('sbmcp_activated_at');
 delete_option('sbmcp_review_dismissed');
 delete_option('sbmcp_review_remind_at');
