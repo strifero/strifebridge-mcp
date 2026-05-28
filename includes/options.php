@@ -64,8 +64,46 @@ function sbmcp_update_option(WP_REST_Request $request) {
 
 function sbmcp_list_options(WP_REST_Request $request) {
     global $wpdb;
-    $pattern = $request->get_param('pattern') ?? '%';
-    $rows = $wpdb->get_results($wpdb->prepare("SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_name LIMIT 100", $pattern), ARRAY_A);
-    $rows = array_filter($rows, fn($r) => !in_array($r['option_name'], SBMCP_OPTIONS_BLACKLIST, true) && !sbmcp_option_is_sensitive($r['option_name']));
-    return ['options' => array_values($rows), 'count' => count($rows)];
+
+    $keys = $request->get_param('keys');
+    $max_value_bytes = (int) ($request->get_param('max_value_bytes') ?? 4096);
+    $max_value_bytes = max(0, min($max_value_bytes, 65536));
+
+    if (is_array($keys) && !empty($keys)) {
+        // Explicit keys mode: caller asks for specific options by name.
+        $safe_keys = [];
+        foreach ($keys as $key) {
+            $key = sanitize_text_field((string) $key);
+            if ($key !== '' && sbmcp_option_is_allowed($key) && !sbmcp_option_is_sensitive($key)) {
+                $safe_keys[] = $key;
+            }
+        }
+        if (empty($safe_keys)) {
+            return ['options' => [], 'count' => 0];
+        }
+        $placeholders = implode(',', array_fill(0, count($safe_keys), '%s'));
+        $sql  = "SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name IN ($placeholders) ORDER BY option_name";
+        $rows = $wpdb->get_results($wpdb->prepare($sql, $safe_keys), ARRAY_A);
+        $rows = $rows ?: [];
+    } else {
+        // Pattern mode (existing behavior).
+        $pattern = $request->get_param('pattern') ?? '%';
+        $rows    = $wpdb->get_results($wpdb->prepare("SELECT option_name, option_value FROM {$wpdb->options} WHERE option_name LIKE %s ORDER BY option_name LIMIT 100", $pattern), ARRAY_A);
+        $rows    = array_values(array_filter($rows ?: [], fn($r) => !in_array($r['option_name'], SBMCP_OPTIONS_BLACKLIST, true) && !sbmcp_option_is_sensitive($r['option_name'])));
+    }
+
+    // Cap large values so giant serialized transients don't blow past response size.
+    if ($max_value_bytes > 0) {
+        $rows = array_map(function($r) use ($max_value_bytes) {
+            $v = $r['option_value'];
+            if (is_string($v) && strlen($v) > $max_value_bytes) {
+                $r['option_value']   = substr($v, 0, $max_value_bytes);
+                $r['_truncated']     = true;
+                $r['_original_bytes'] = strlen($v);
+            }
+            return $r;
+        }, $rows);
+    }
+
+    return ['options' => $rows, 'count' => count($rows)];
 }

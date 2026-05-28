@@ -150,8 +150,8 @@ function sbmcp_mcp_all_tools(): array {
             ],
         ], _sbmcp_ann_read()),
 
-        'create_post'  => array_merge(['name' => 'create_post',  'description' => 'Create a new post or page. Params: title, content, status, type, meta.', 'inputSchema' => ['type' => 'object', 'properties' => ['title' => ['type' => 'string'], 'content' => ['type' => 'string'], 'status' => ['type' => 'string'], 'type' => ['type' => 'string'], 'meta' => ['type' => 'object']]]], _sbmcp_ann_write()),
-        'update_post'  => array_merge(['name' => 'update_post',  'description' => 'Update a post or page by ID.', 'inputSchema' => ['type' => 'object', 'properties' => ['id' => ['type' => 'integer'], 'content' => ['type' => 'string'], 'title' => ['type' => 'string'], 'status' => ['type' => 'string'], 'meta' => ['type' => 'object']], 'required' => ['id']]], _sbmcp_ann_write()),
+        'create_post'  => array_merge(['name' => 'create_post',  'description' => 'Create a new post or page. Params: title, content, status, type, meta, featured_media (attachment ID to set as featured image).', 'inputSchema' => ['type' => 'object', 'properties' => ['title' => ['type' => 'string'], 'content' => ['type' => 'string'], 'status' => ['type' => 'string'], 'type' => ['type' => 'string'], 'meta' => ['type' => 'object'], 'featured_media' => ['type' => 'integer', 'description' => 'Attachment ID to set as the featured image.']]]], _sbmcp_ann_write()),
+        'update_post'  => array_merge(['name' => 'update_post',  'description' => 'Update a post or page by ID. Pass featured_media (or thumbnail_id) to set/replace the featured image; pass 0 to remove it.', 'inputSchema' => ['type' => 'object', 'properties' => ['id' => ['type' => 'integer'], 'content' => ['type' => 'string'], 'title' => ['type' => 'string'], 'status' => ['type' => 'string'], 'meta' => ['type' => 'object'], 'featured_media' => ['type' => 'integer', 'description' => 'Attachment ID to set as the featured image. Pass 0 to remove the existing featured image.']], 'required' => ['id']]], _sbmcp_ann_write()),
         'delete_post'  => array_merge(['name' => 'delete_post',  'description' => 'Trash or permanently delete a post. force=true permanently deletes.', 'inputSchema' => ['type' => 'object', 'properties' => ['id' => ['type' => 'integer'], 'force' => ['type' => 'boolean']], 'required' => ['id']]], _sbmcp_ann_write()),
 
         'list_media'   => array_merge(['name' => 'list_media',   'description' => 'List media library items.', 'inputSchema' => ['type' => 'object', 'properties' => ['per_page' => ['type' => 'integer']]]], _sbmcp_ann_read()),
@@ -161,7 +161,7 @@ function sbmcp_mcp_all_tools(): array {
 
         'get_option'    => array_merge(['name' => 'get_option',    'description' => 'Read a WordPress option by key.', 'inputSchema' => ['type' => 'object', 'properties' => ['key' => ['type' => 'string']], 'required' => ['key']]], _sbmcp_ann_read()),
         'update_option' => array_merge(['name' => 'update_option', 'description' => 'Write a WordPress option.', 'inputSchema' => ['type' => 'object', 'properties' => ['key' => ['type' => 'string'], 'value' => ['type' => 'string', 'description' => 'Option value. Strings, numbers, and booleans stored as-is; pass objects/arrays as JSON-encoded string.']], 'required' => ['key', 'value']]], _sbmcp_ann_write()),
-        'list_options'  => array_merge(['name' => 'list_options',  'description' => 'Search options by key pattern (SQL LIKE).', 'inputSchema' => ['type' => 'object', 'properties' => ['pattern' => ['type' => 'string']]]], _sbmcp_ann_read()),
+        'list_options'  => array_merge(['name' => 'list_options',  'description' => 'List WordPress options. Provide either keys (explicit list of option names) or pattern (SQL LIKE on option_name, capped at 100 rows). Blacklisted keys and sensitive-pattern keys (secrets, tokens, passwords) are always filtered out. Values longer than max_value_bytes (default 4096, max 65536, 0 disables) are truncated and the row is marked with _truncated:true plus _original_bytes.', 'inputSchema' => ['type' => 'object', 'properties' => ['keys' => ['type' => 'array', 'items' => ['type' => 'string'], 'description' => 'Explicit list of option_name values to fetch. Takes precedence over pattern.'], 'pattern' => ['type' => 'string', 'description' => 'SQL LIKE pattern on option_name. Used only when keys is not provided. Limited to 100 results.'], 'max_value_bytes' => ['type' => 'integer', 'description' => 'Truncate option_value strings longer than this. Default 4096, max 65536. Pass 0 to disable truncation.']]]], _sbmcp_ann_read()),
 
         'list_users'   => array_merge(['name' => 'list_users',   'description' => 'List all users with roles.', 'inputSchema' => ['type' => 'object', 'properties' => new stdClass()]], _sbmcp_ann_read()),
 
@@ -316,7 +316,12 @@ function sbmcp_mcp_tools_call($id, $params) {
 
         case 'get_option':    return sbmcp_mcp_cb($id, sbmcp_get_option($param_req(['key' => $input['key'] ?? ''])));
         case 'update_option': return sbmcp_mcp_cb($id, sbmcp_update_option($json_req(['key' => $input['key'] ?? '', 'value' => $input['value'] ?? null])));
-        case 'list_options':  return sbmcp_mcp_cb($id, sbmcp_list_options($param_req(['pattern' => $input['pattern'] ?? '%'])));
+        case 'list_options':
+            $lopt_req = new WP_REST_Request();
+            if (isset($input['keys']))            $lopt_req->set_param('keys',            $input['keys']);
+            if (isset($input['pattern']))         $lopt_req->set_param('pattern',         $input['pattern']);
+            if (isset($input['max_value_bytes'])) $lopt_req->set_param('max_value_bytes', $input['max_value_bytes']);
+            return sbmcp_mcp_cb($id, sbmcp_list_options($lopt_req));
 
         case 'list_users':   return sbmcp_mcp_cb($id, sbmcp_list_users(new WP_REST_Request()));
 

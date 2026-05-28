@@ -48,6 +48,10 @@ function sbmcp_create_post(WP_REST_Request $request) {
     }
     $id = wp_insert_post($post_data, true);
     if (is_wp_error($id)) return new WP_Error('create_error', $id->get_error_message(), ['status' => 400]);
+    $thumb_id = $params['featured_media'] ?? ($params['thumbnail_id'] ?? null);
+    if ($thumb_id !== null && (int) $thumb_id > 0) {
+        set_post_thumbnail($id, (int) $thumb_id);
+    }
     return ['status' => 'created', 'id' => $id, 'url' => get_permalink($id)];
 }
 
@@ -60,6 +64,14 @@ function sbmcp_update_post(WP_REST_Request $request) {
     if (isset($params['status']))  $update['post_status']  = $params['status'];
     $result = wp_update_post($update, true);
     if (is_wp_error($result)) return new WP_Error('update_failed', $result->get_error_message(), ['status' => 500]);
+    if (array_key_exists('featured_media', $params) || array_key_exists('thumbnail_id', $params)) {
+        $thumb_id = (int) ($params['featured_media'] ?? $params['thumbnail_id']);
+        if ($thumb_id > 0) {
+            set_post_thumbnail($id, $thumb_id);
+        } else {
+            delete_post_thumbnail($id);
+        }
+    }
     if (!empty($params['meta']) && is_array($params['meta'])) {
         foreach (sbmcp_filter_public_meta($params['meta']) as $key => $value) update_post_meta($id, $key, $value);
     }

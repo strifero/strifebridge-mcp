@@ -2,9 +2,9 @@
 Contributors: strifero
 Tags: mcp, claude, ai, automation, rest-api
 Requires at least: 5.6
-Tested up to: 6.9
+Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.0.0
+Stable tag: 2.1.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -122,6 +122,13 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 
 == Changelog ==
 
+= 2.1.0 =
+* Verified compatible with WordPress 7.0.
+* Fix: `update_post` now honors `featured_media` (or `thumbnail_id`) to set or remove a post's featured image. Previously the parameter was silently ignored.
+* Fix: `create_post` now accepts `featured_media` (or `thumbnail_id`) to set a featured image at creation time.
+* Improvement: `list_options` adds an explicit `keys` parameter so callers can fetch a specific allowlist of options instead of dumping the whole options table.
+* Improvement: `list_options` now truncates oversized option values (configurable via `max_value_bytes`, default 4096 bytes). Prevents giant serialized transients from overwhelming response sizes. Truncated rows are marked with `_truncated: true` and `_original_bytes`.
+
 = 2.0.0 =
 * Initial release as StrifeBridge MCP for WordPress
 * MCP server with token authentication at `/wp-json/strifebridge/v1/`
@@ -139,6 +146,9 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 * Extension hooks for add-on plugins
 
 == Upgrade Notice ==
+
+= 2.1.0 =
+Bug fixes for `update_post` (now honors `featured_media`) and `list_options` (new `keys` parameter, large-value truncation). WordPress 7.0 compatibility verified.
 
 = 2.0.0 =
 Initial release. Install to connect your WordPress site to Claude and other MCP-capable AI assistants.
