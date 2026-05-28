@@ -125,7 +125,6 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 = 2.3.0 =
 * Security: Emergency Lockdown now also disables the WordPress Abilities surface, not just the MCP and REST endpoints that use the bearer token. Previously, clicking Disable API left every tool callable through the Abilities API and MCP Adapter path.
 * Security: Plugin internal options (the sbmcp_ prefixed options that store the API token, lockdown state, tool group toggles, and the abilities switch) are now blocked from the options tool entirely. Previously a token holder with the Options group enabled could switch tool groups back on that an administrator had disabled.
-* Removed the legacy pressbridge/v1 REST and MCP namespace. Connectors must use strifebridge/v1. Update any connector URL still pointing at /wp-json/pressbridge/v1/.
 * Cleanup: uninstall now also removes the sbmcp_abilities_disabled option.
 
 = 2.2.0 =
@@ -161,7 +160,7 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 == Upgrade Notice ==
 
 = 2.3.0 =
-Security release. Emergency Lockdown now covers the Abilities surface, and plugin internal options can no longer be read or changed through the options tool. The legacy pressbridge/v1 namespace has been removed; update any connector URL still using it.
+Security release. Emergency Lockdown now covers the Abilities surface, and plugin internal options can no longer be read or changed through the options tool. No breaking changes; existing connector URLs continue to work.
 
 = 2.2.0 =
 Adds native WordPress 7.0 Abilities API support: StrifeBridge tools are now discoverable and callable through the core MCP Adapter, gated by WordPress capabilities. The existing MCP endpoint is unchanged.
