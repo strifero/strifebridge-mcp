@@ -14,6 +14,10 @@ function sbmcp_register_mcp_route() {
     register_rest_route('strifebridge/v1', '/http', $args);
     register_rest_route('strifebridge/v1', '/mcp',  $args);
 
+    // DEPRECATED: pressbridge/v1 namespace kept for back-compat with existing connectors. Tracked for removal in issue #9.
+    register_rest_route('pressbridge/v1', '/http', $args);
+    register_rest_route('pressbridge/v1', '/mcp',  $args);
+
     // Token-in-path route: the token embedded in the URL IS the authentication.
     // show_in_index => false keeps the token out of the anonymous /wp-json/ route discovery.
     if (!get_option('sbmcp_api_disabled')) {
@@ -26,6 +30,8 @@ function sbmcp_register_mcp_route() {
                 'show_in_index'       => false,
             ];
             register_rest_route('strifebridge/v1', '/' . $token, $token_args);
+            // DEPRECATED back-compat. Tracked for removal in issue #9.
+            register_rest_route('pressbridge/v1', '/' . $token, $token_args);
         }
     }
 }
