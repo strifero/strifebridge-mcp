@@ -4,7 +4,7 @@ Tags: mcp, claude, ai, automation, rest-api
 Requires at least: 5.6
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.2.0
+Stable tag: 2.3.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -122,6 +122,12 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 
 == Changelog ==
 
+= 2.3.0 =
+* Security: Emergency Lockdown now also disables the WordPress Abilities surface, not just the MCP and REST endpoints that use the bearer token. Previously, clicking Disable API left every tool callable through the Abilities API and MCP Adapter path.
+* Security: Plugin internal options (the sbmcp_ prefixed options that store the API token, lockdown state, tool group toggles, and the abilities switch) are now blocked from the options tool entirely. Previously a token holder with the Options group enabled could switch tool groups back on that an administrator had disabled.
+* Removed the legacy pressbridge/v1 REST and MCP namespace. Connectors must use strifebridge/v1. Update any connector URL still pointing at /wp-json/pressbridge/v1/.
+* Cleanup: uninstall now also removes the sbmcp_abilities_disabled option.
+
 = 2.2.0 =
 * New: StrifeBridge tools are now registered as native WordPress Abilities on WordPress 7.0 and later, so they appear in the core ability registry and can be called through the MCP Adapter by any compatible AI client. The existing StrifeBridge MCP endpoint is unchanged and continues to work on all supported versions.
 * The abilities surface runs under the authenticated WordPress user and gates every tool with a real capability check (for example edit_posts, upload_files, manage_options), independent of the StrifeBridge bearer token.
@@ -153,6 +159,9 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 * Extension hooks for add-on plugins
 
 == Upgrade Notice ==
+
+= 2.3.0 =
+Security release. Emergency Lockdown now covers the Abilities surface, and plugin internal options can no longer be read or changed through the options tool. The legacy pressbridge/v1 namespace has been removed; update any connector URL still using it.
 
 = 2.2.0 =
 Adds native WordPress 7.0 Abilities API support: StrifeBridge tools are now discoverable and callable through the core MCP Adapter, gated by WordPress capabilities. The existing MCP endpoint is unchanged.
