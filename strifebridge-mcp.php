@@ -3,7 +3,7 @@
  * Plugin Name: StrifeBridge MCP
  * Plugin URI:  https://strifetech.com/strifebridge-mcp
  * Description: Connect your WordPress site to Claude and other AI models via a secure MCP server and REST API.
- * Version:     2.1.0
+ * Version:     2.2.0
  * Author:      Strife Technologies
  * Author URI:  https://strifetech.com
  * License:     GPL v2 or later
@@ -16,7 +16,7 @@
 
 if (!defined('ABSPATH')) { exit; }
 
-define('SBMCP_VERSION', '2.1.0');
+define('SBMCP_VERSION', '2.2.0');
 define('SBMCP_PATH', plugin_dir_path(__FILE__));
 define('SBMCP_URL',  plugin_dir_url(__FILE__));
 
@@ -32,6 +32,7 @@ require_once SBMCP_PATH . 'includes/widgets.php';
 require_once SBMCP_PATH . 'includes/system.php';
 require_once SBMCP_PATH . 'api/api.php';
 require_once SBMCP_PATH . 'mcp/mcp.php';
+require_once SBMCP_PATH . 'includes/abilities.php';
 require_once SBMCP_PATH . 'admin/settings.php';
 
 register_activation_hook(__FILE__, 'sbmcp_activate');

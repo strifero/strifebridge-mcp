@@ -4,7 +4,7 @@ Tags: mcp, claude, ai, automation, rest-api
 Requires at least: 5.6
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.1.0
+Stable tag: 2.2.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -122,6 +122,13 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 
 == Changelog ==
 
+= 2.2.0 =
+* New: StrifeBridge tools are now registered as native WordPress Abilities on WordPress 7.0 and later, so they appear in the core ability registry and can be called through the MCP Adapter by any compatible AI client. The existing StrifeBridge MCP endpoint is unchanged and continues to work on all supported versions.
+* The abilities surface runs under the authenticated WordPress user and gates every tool with a real capability check (for example edit_posts, upload_files, manage_options), independent of the StrifeBridge bearer token.
+* Per tool group toggles in Settings also apply to the abilities surface: a disabled group is not exposed as abilities.
+* The abilities bridge can be turned off entirely with the sbmcp_enable_abilities filter or the sbmcp_abilities_disabled option.
+* No effect on WordPress versions below 7.0, where the Abilities API does not exist.
+
 = 2.1.0 =
 * Verified compatible with WordPress 7.0.
 * Fix: `update_post` now honors `featured_media` (or `thumbnail_id`) to set or remove a post's featured image. Previously the parameter was silently ignored.
@@ -146,6 +153,9 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 * Extension hooks for add-on plugins
 
 == Upgrade Notice ==
+
+= 2.2.0 =
+Adds native WordPress 7.0 Abilities API support: StrifeBridge tools are now discoverable and callable through the core MCP Adapter, gated by WordPress capabilities. The existing MCP endpoint is unchanged.
 
 = 2.1.0 =
 Bug fixes for `update_post` (now honors `featured_media`) and `list_options` (new `keys` parameter, large-value truncation). WordPress 7.0 compatibility verified.
