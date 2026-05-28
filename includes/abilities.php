@@ -148,8 +148,11 @@ function sbmcp_register_abilities() {
         return;
     }
 
-    // Allow the whole bridge to be turned off (option or filter).
-    if (get_option('sbmcp_abilities_disabled') || !apply_filters('sbmcp_enable_abilities', true)) {
+    // Allow the whole bridge to be turned off (option or filter). Emergency
+    // Lockdown via sbmcp_api_disabled now disables the abilities surface too,
+    // so the Danger Zone "Disable API" control cuts off every tool path and not
+    // only the MCP and REST endpoints that use the bearer token.
+    if (get_option('sbmcp_api_disabled') || get_option('sbmcp_abilities_disabled') || !apply_filters('sbmcp_enable_abilities', true)) {
         return;
     }
 
