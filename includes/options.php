@@ -42,6 +42,23 @@ function sbmcp_option_is_allowed(string $key): bool {
     if (strpos($key, 'sbmcp_') === 0) {
         return false;
     }
+
+    // Prefix-aware guard for the role/capability maps. The static blacklist below
+    // only lists the default-prefix 'wp_user_roles'; on installs with a custom
+    // $wpdb->prefix the real options are {$prefix}user_roles and {$prefix}user_settings,
+    // which would otherwise pass this check and let a token holder rewrite the
+    // role -> capability map (a persistent privilege escalation). Block them
+    // regardless of prefix, plus any key ending in _user_roles / _capabilities as
+    // a backstop. Applied here so both the read and write paths are covered.
+    global $wpdb;
+    $prefix = (isset($wpdb) && !empty($wpdb->prefix)) ? $wpdb->prefix : 'wp_';
+    if (in_array($key, [$prefix . 'user_roles', $prefix . 'user_settings'], true)) {
+        return false;
+    }
+    if (preg_match('/(_user_roles|_capabilities)$/i', $key)) {
+        return false;
+    }
+
     return !in_array($key, SBMCP_OPTIONS_BLACKLIST, true);
 }
 
@@ -68,7 +85,25 @@ function sbmcp_update_option(WP_REST_Request $request) {
     $value  = $params['value'] ?? null;
     if (!$key || $value === null) return new WP_Error('missing_fields', 'Provide key and value.', ['status' => 400]);
     if (!sbmcp_option_is_allowed($key)) return new WP_Error('forbidden', 'This option cannot be modified via the API.', ['status' => 403]);
-    return ['status' => update_option($key, $value) ? 'updated' : 'unchanged', 'key' => $key];
+    // Mirror the read path: a key matching a sensitive pattern (token/secret/key/
+    // password/roles/caps) cannot be read, so it must not be writable either.
+    // Without this the reader blocks it but the writer would happily overwrite a
+    // third-party plugin's stored secret with an attacker-chosen value.
+    if (sbmcp_option_is_sensitive($key)) return new WP_Error('forbidden_sensitive_option', 'This option key matches a sensitive pattern (key/secret/token/password) and cannot be modified via the API.', ['status' => 403]);
+
+    // Distinguish a genuine no-op from a failed write. update_option() returns
+    // false both when the stored value already equals the new one and when the
+    // write fails, so pre-read with a sentinel default to tell "absent" apart
+    // from a stored false, and only report "unchanged" when the value truly matches.
+    $sentinel = '__sbmcp_option_absent__';
+    $current  = get_option($key, $sentinel);
+    if ($current !== $sentinel && $current === $value) {
+        return ['status' => 'unchanged', 'key' => $key];
+    }
+    if (!update_option($key, $value)) {
+        return new WP_Error('update_failed', 'The option value could not be written.', ['status' => 500]);
+    }
+    return ['status' => 'updated', 'key' => $key];
 }
 
 function sbmcp_list_options(WP_REST_Request $request) {

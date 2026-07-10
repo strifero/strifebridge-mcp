@@ -4,7 +4,7 @@ Tags: mcp, claude, ai, automation, rest-api
 Requires at least: 5.6
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.3.0
+Stable tag: 2.3.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -122,6 +122,12 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 
 == Changelog ==
 
+= 2.3.1 =
+* Security: The options tool no longer lets a token holder overwrite options it refuses to read. The write path now applies the same sensitive-key check (token/secret/key/password/roles/capabilities) as the read and list paths, closing a read/write asymmetry.
+* Security: The role and capability map guard is now prefix-aware. Previously only the default-prefix `wp_user_roles` was blocked; on installs with a custom database prefix the real `{prefix}user_roles` and `{prefix}user_settings` options, plus any key ending in `_user_roles` or `_capabilities`, are now blocked on both read and write. This prevents a token holder from rewriting the role-to-capability map to escalate privileges.
+* Security: Base64 media uploads now reject payloads larger than 10 MB before decoding, and the file type is validated from the filename before anything is written to disk.
+* Fix: `update_option` now distinguishes a genuine no-op ("unchanged") from a failed write, which previously both reported "unchanged".
+
 = 2.3.0 =
 * Security: Emergency Lockdown now also disables the WordPress Abilities surface, not just the MCP and REST endpoints that use the bearer token. Previously, clicking Disable API left every tool callable through the Abilities API and MCP Adapter path.
 * Security: Plugin internal options (the sbmcp_ prefixed options that store the API token, lockdown state, tool group toggles, and the abilities switch) are now blocked from the options tool entirely. Previously a token holder with the Options group enabled could switch tool groups back on that an administrator had disabled.
@@ -158,6 +164,9 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 * Extension hooks for add-on plugins
 
 == Upgrade Notice ==
+
+= 2.3.1 =
+Security release. Closes a privilege-escalation path where a token holder could overwrite sensitive options (including the role/capability map on custom-prefix installs) that the API refuses to read, and adds a size cap on base64 media uploads. Recommended for all installs. No breaking changes; existing connector URLs continue to work.
 
 = 2.3.0 =
 Security release. Emergency Lockdown now covers the Abilities surface, and plugin internal options can no longer be read or changed through the options tool. No breaking changes; existing connector URLs continue to work.

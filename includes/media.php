@@ -50,12 +50,25 @@ function sbmcp_upload_media(WP_REST_Request $request) {
         if (strtolower(pathinfo($name, PATHINFO_EXTENSION)) === 'svg') {
             return new WP_Error('disallowed_type', 'SVG uploads are not supported.', ['status' => 400]);
         }
+        // Cap the encoded payload before decoding so an oversized body can't
+        // exhaust memory/disk. 10 MB of base64 decodes to ~7.5 MB on disk.
+        if (strlen($b64) > 10485760) {
+            return new WP_Error('payload_too_large', 'Base64 payload exceeds the 10 MB limit.', ['status' => 413]);
+        }
+        // Validate the declared file type from the filename BEFORE writing to disk,
+        // so a disallowed type is rejected without ever landing a file on the server.
+        $filetype = wp_check_filetype($name);
+        if (empty($filetype['type'])) {
+            return new WP_Error('disallowed_type', 'File type is not permitted.', ['status' => 400]);
+        }
         $data = base64_decode($b64);
         if ($data === false) return new WP_Error('invalid_base64', 'Invalid base64 data.', ['status' => 400]);
 
         $upload = wp_upload_bits($name, null, $data);
         if ($upload['error']) return new WP_Error('upload_error', $upload['error'], ['status' => 500]);
 
+        // Re-check the written file as a defense-in-depth backstop and to pick up
+        // the canonical type of the actual stored file.
         $filetype = wp_check_filetype($upload['file']);
         if (empty($filetype['type'])) {
             @unlink($upload['file']);
