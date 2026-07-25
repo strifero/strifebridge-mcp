@@ -41,22 +41,45 @@ function sbmcp_register_mcp_route() {
  * so we validate it here rather than returning true blindly.
  */
 function sbmcp_mcp_validate_token_path(WP_REST_Request $request): bool {
-    if (get_option('sbmcp_api_disabled')) return false;
+    if (get_option('sbmcp_api_disabled')) {
+        sbmcp_audit_log_auth_failure('MCP request refused: API is disabled (Emergency Lockdown).');
+        return false;
+    }
     $stored = get_option('sbmcp_api_token');
-    if (!$stored) return false;
+    if (!$stored) {
+        sbmcp_audit_log_auth_failure('MCP request refused: no API token is configured.');
+        return false;
+    }
     // Extract token from the route — the last segment of the path.
     $route = $request->get_route();
     $segments = explode('/', trim($route, '/'));
     $path_token = end($segments);
-    return hash_equals($stored, $path_token);
+    $valid = hash_equals($stored, $path_token);
+    if (!$valid) {
+        sbmcp_audit_log_auth_failure('Invalid token in MCP connector URL path.');
+    }
+    return $valid;
 }
 
 function sbmcp_mcp_validate(WP_REST_Request $request): bool {
-    if (get_option('sbmcp_api_disabled')) return false;
+    if (get_option('sbmcp_api_disabled')) {
+        sbmcp_audit_log_auth_failure('MCP request refused: API is disabled (Emergency Lockdown).');
+        return false;
+    }
     $stored = get_option('sbmcp_api_token');
-    if (!$stored) return false;
+    if (!$stored) {
+        sbmcp_audit_log_auth_failure('MCP request refused: no API token is configured.');
+        return false;
+    }
     $auth = $request->get_header('Authorization');
-    if ($auth && strpos($auth, 'Bearer ') === 0) return hash_equals($stored, substr($auth, 7));
+    if ($auth && strpos($auth, 'Bearer ') === 0) {
+        $valid = hash_equals($stored, substr($auth, 7));
+        if (!$valid) {
+            sbmcp_audit_log_auth_failure('Invalid bearer token presented to the MCP endpoint.');
+        }
+        return $valid;
+    }
+    sbmcp_audit_log_auth_failure('MCP request refused: no credentials presented.');
     return false;
 }
 
@@ -214,16 +237,61 @@ function sbmcp_mcp_tools_list($id) {
     return sbmcp_mcp_response($id, ['tools' => $tools]);
 }
 
+/**
+ * Entry point for tools/call: applies the tool-group and read-only guards,
+ * dispatches, and records the outcome in the audit log.
+ *
+ * This is the single choke point for the MCP endpoint and the Abilities surface
+ * (which calls it through sbmcp_ability_execute). REST routes reach the same
+ * handlers via sbmcp_guarded_callback() instead, so no call is logged twice.
+ *
+ * @param mixed $id     JSON-RPC request id.
+ * @param array $params tools/call params ('name', 'arguments').
+ * @return WP_REST_Response
+ */
 function sbmcp_mcp_tools_call($id, $params) {
     $name  = $params['name']      ?? '';
-    $input = $params['arguments'] ?? [];
+    $input = (array) ($params['arguments'] ?? []);
 
     $group_map = sbmcp_mcp_tool_group_map();
     $group     = $group_map[$name] ?? null;
 
     if ($group && !sbmcp_tool_enabled($group)) {
-        return sbmcp_mcp_tool_error($id, "Tool group '{$group}' is disabled. Enable it in StrifeBridge MCP Settings.");
+        $message = "Tool group '{$group}' is disabled. Enable it in StrifeBridge MCP Settings.";
+        sbmcp_audit_log($name, $input, 'denied', $message);
+        return sbmcp_mcp_tool_error($id, $message);
     }
+
+    $denied = sbmcp_write_guard($name);
+    if ($denied) {
+        sbmcp_audit_log($name, $input, 'denied', $denied->get_error_message());
+        return sbmcp_mcp_tool_error($id, $denied->get_error_message());
+    }
+
+    $response = sbmcp_mcp_dispatch_tool($id, $params);
+
+    $data = ($response instanceof WP_REST_Response) ? $response->get_data() : null;
+    if (is_array($data) && isset($data['error'])) {
+        sbmcp_audit_log($name, $input, 'error', $data['error']['message'] ?? 'Unknown error');
+    } elseif (is_array($data) && !empty($data['result']['isError'])) {
+        sbmcp_audit_log($name, $input, 'error', $data['result']['content'][0]['text'] ?? 'Tool returned an error');
+    } else {
+        sbmcp_audit_log($name, $input, 'success');
+    }
+
+    return $response;
+}
+
+/**
+ * Executes a tool. Guards and logging are handled by sbmcp_mcp_tools_call().
+ *
+ * @param mixed $id     JSON-RPC request id.
+ * @param array $params tools/call params ('name', 'arguments').
+ * @return WP_REST_Response
+ */
+function sbmcp_mcp_dispatch_tool($id, $params) {
+    $name  = $params['name']      ?? '';
+    $input = $params['arguments'] ?? [];
 
     // Extension point: let add-ons handle their own tool calls.
     $ext_result = apply_filters('sbmcp_mcp_tool_call', null, $name, $input, $id);
