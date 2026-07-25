@@ -8,8 +8,10 @@ if (!defined('ABSPATH')) {
 }
 
 function sbmcp_list_media(WP_REST_Request $request) {
-    $per_page = (int) ($request->get_param('per_page') ?? 50);
-    $items = get_posts(['post_type' => 'attachment', 'post_status' => 'inherit', 'posts_per_page' => min($per_page, 200)]);
+    // Floor at 1: a negative posts_per_page means "no limit" to WP_Query, so
+    // per_page=-1 would return the entire media library in one response.
+    $per_page = min(max((int) ($request->get_param('per_page') ?? 50), 1), 200);
+    $items = get_posts(['post_type' => 'attachment', 'post_status' => 'inherit', 'posts_per_page' => $per_page]);
     return array_map(fn($item) => ['id' => $item->ID, 'title' => $item->post_title, 'filename' => basename(get_attached_file($item->ID)), 'url' => wp_get_attachment_url($item->ID), 'type' => $item->post_mime_type, 'date' => $item->post_date], $items);
 }
 
@@ -67,13 +69,26 @@ function sbmcp_upload_media(WP_REST_Request $request) {
         $upload = wp_upload_bits($name, null, $data);
         if ($upload['error']) return new WP_Error('upload_error', $upload['error'], ['status' => 500]);
 
-        // Re-check the written file as a defense-in-depth backstop and to pick up
-        // the canonical type of the actual stored file.
-        $filetype = wp_check_filetype($upload['file']);
-        if (empty($filetype['type'])) {
+        // Re-check the written file by CONTENT, not just by extension.
+        // wp_check_filetype() above only maps the filename extension to a MIME
+        // type, so a file whose real bytes are something else entirely (PHP
+        // source or HTML shipped as .jpg) passes it. wp_check_filetype_and_ext()
+        // sniffs the written bytes with finfo and reports a corrected
+        // proper_filename when the content disagrees with the extension. Either
+        // a missing type or a proposed rename means the declared type was a lie,
+        // so the file is removed before it can be served.
+        // Note: without the fileinfo PHP extension this degrades to the same
+        // extension-only check as wp_check_filetype().
+        $checked = wp_check_filetype_and_ext($upload['file'], basename($upload['file']));
+        if (empty($checked['type'])) {
             @unlink($upload['file']);
             return new WP_Error('disallowed_type', 'File type is not permitted.', ['status' => 400]);
         }
+        if (!empty($checked['proper_filename'])) {
+            @unlink($upload['file']);
+            return new WP_Error('type_mismatch', 'File content does not match its extension. Rename the file to match its actual type.', ['status' => 400]);
+        }
+        $filetype = ['ext' => $checked['ext'], 'type' => $checked['type']];
         $id = wp_insert_attachment(['post_mime_type' => $filetype['type'], 'post_title' => $title ?? sanitize_file_name($name), 'post_content' => '', 'post_status' => 'inherit'], $upload['file']);
         wp_update_attachment_metadata($id, wp_generate_attachment_metadata($id, $upload['file']));
         return ['status' => 'uploaded', 'id' => $id, 'url' => wp_get_attachment_url($id)];

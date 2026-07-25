@@ -16,6 +16,7 @@ define('SBMCP_OPTIONS_BLACKLIST', [
     'default_role', 'users_can_register',
     'mailserver_url', 'mailserver_login', 'mailserver_pass',
     'wp_user_roles', 'db_version', 'cron',
+    'upload_path', 'upload_url_path',
 ]);
 
 /**
@@ -25,6 +26,7 @@ define('SBMCP_OPTIONS_BLACKLIST', [
 const SBMCP_OPTIONS_SENSITIVE_PATTERNS = [
     '/_key$/i',
     '/_secret$/i',
+    '/_salt$/i',
     '/token/i',
     '/password/i',
     '/_pass$/i',
@@ -32,7 +34,27 @@ const SBMCP_OPTIONS_SENSITIVE_PATTERNS = [
     '/_capabilities$/i',
 ];
 
+/**
+ * Normalizes an option key to the form the database actually matches on.
+ *
+ * wp_options.option_name lives under a case-insensitive (_ci) collation on a
+ * default MySQL/MariaDB install, and get_option()/update_option() both trim()
+ * the key before querying. A guard that compares the raw caller-supplied string
+ * therefore disagrees with the row the query resolves to: 'SITEURL' and
+ * ' siteurl' both reach the real siteurl row while sailing past a
+ * case-sensitive in_array() check against a lowercase blacklist. Normalize once
+ * here so every guard below compares the same string the database will.
+ *
+ * @param string $key Caller-supplied option key.
+ * @return string Lowercased, trimmed key.
+ */
+function sbmcp_normalize_option_key(string $key): string {
+    return strtolower(trim($key));
+}
+
 function sbmcp_option_is_allowed(string $key): bool {
+    $key = sbmcp_normalize_option_key($key);
+
     // Guard every plugin-internal option. The sbmcp_ prefixed options store the
     // API token, lockdown state, tool-group toggles, and the abilities switch.
     // Letting the options tool read or write them would let a token holder undo
@@ -40,6 +62,16 @@ function sbmcp_option_is_allowed(string $key): bool {
     // tool group back on, or clearing sbmcp_abilities_disabled). None of these
     // are legitimately reachable through the generic options tool.
     if (strpos($key, 'sbmcp_') === 0) {
+        return false;
+    }
+
+    // Block transients. update_option() accepts arbitrary JSON, so a writable
+    // _site_transient_update_plugins lets a token holder forge an update record
+    // with an attacker-controlled package URL; the next auto-update run then
+    // installs it. That turns the plugin-management surface into arbitrary code
+    // installation, which the free tier otherwise cannot do. Covers the
+    // _transient_ / _site_transient_ families and their _timeout_ companions.
+    if (preg_match('/^_?(site_)?transient(_timeout)?_/', $key)) {
         return false;
     }
 
@@ -51,7 +83,7 @@ function sbmcp_option_is_allowed(string $key): bool {
     // regardless of prefix, plus any key ending in _user_roles / _capabilities as
     // a backstop. Applied here so both the read and write paths are covered.
     global $wpdb;
-    $prefix = (isset($wpdb) && !empty($wpdb->prefix)) ? $wpdb->prefix : 'wp_';
+    $prefix = (isset($wpdb) && !empty($wpdb->prefix)) ? strtolower($wpdb->prefix) : 'wp_';
     if (in_array($key, [$prefix . 'user_roles', $prefix . 'user_settings'], true)) {
         return false;
     }
@@ -63,6 +95,10 @@ function sbmcp_option_is_allowed(string $key): bool {
 }
 
 function sbmcp_option_is_sensitive(string $key): bool {
+    // Normalized for the same reason as sbmcp_option_is_allowed(): the patterns
+    // are anchored, so a trailing space on "auth_key " would otherwise defeat
+    // the /_key$/i match while still resolving to the real row.
+    $key = sbmcp_normalize_option_key($key);
     foreach (SBMCP_OPTIONS_SENSITIVE_PATTERNS as $pattern) {
         if (preg_match($pattern, $key)) return true;
     }

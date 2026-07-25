@@ -260,6 +260,11 @@ function sbmcp_mcp_tools_call($id, $params) {
             if (!$pid) return sbmcp_mcp_tool_error($id, 'id is required');
             $p = get_post($pid);
             if (!$p) return sbmcp_mcp_tool_error($id, "Post {$pid} not found");
+            // Same cross-group guard the other posts tools apply: attachments and
+            // nav menu items belong to the media and menus groups, which carry
+            // their own toggle.
+            $delegated = sbmcp_posts_delegated_type_error($p->post_type);
+            if ($delegated) return sbmcp_mcp_tool_error($id, $delegated->get_error_message());
 
             $include = $input['include'] ?? ['meta', 'terms', 'thumbnail', 'author'];
             $exclude = $input['exclude'] ?? [];

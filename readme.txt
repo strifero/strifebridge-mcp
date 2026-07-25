@@ -4,7 +4,7 @@ Tags: mcp, claude, ai, automation, rest-api
 Requires at least: 5.6
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.3.1
+Stable tag: 2.3.2
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -122,6 +122,17 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 
 == Changelog ==
 
+= 2.3.2 =
+* Security: The options tool guards are now case- and whitespace-normalized. `wp_options.option_name` is matched case-insensitively by MySQL and WordPress trims option keys before querying, so a key such as `SITEURL` or ` siteurl` previously slipped past the case-sensitive blacklist and still resolved to the real row. Every guard now compares the same normalized key the database does, on the read, write, and list paths.
+* Security: Transients can no longer be written through the options tool. A forged `_site_transient_update_plugins` record could point WordPress at an attacker-supplied package URL and have the next auto-update install it.
+* Security: `upload_path` and `upload_url_path` are now blacklisted, so the upload destination cannot be redirected through the options tool.
+* Security: Option keys ending in `_salt` are now treated as sensitive and cannot be read or written.
+* Security: Base64 media uploads are now validated by file content, not just by filename. The written file is sniffed with `wp_check_filetype_and_ext()` and removed if its real contents do not match the declared extension.
+* Security: The posts tools (`list_posts`, `get_post`, `get_post_details`, `update_post`, `delete_post`) now refuse to operate on attachments and navigation menu items. Because those are posts underneath, `delete_post` could previously delete media with the Media tool group switched off, and menu items with Menus off. Use the dedicated media and menu tools instead.
+* Security: The self-protection check in the plugin tools is now case-insensitive, so on a case-insensitive filesystem StrifeBridge MCP can no longer be tricked into deactivating or deleting itself.
+* Fix: `list_media` and `list_terms` now clamp `per_page` to a minimum of 1. A negative value meant "no limit" to WordPress and returned the entire media library or term set in a single response.
+* The GPLv2 license text is now included in the distribution.
+
 = 2.3.1 =
 * Security: The options tool no longer lets a token holder overwrite options it refuses to read. The write path now applies the same sensitive-key check (token/secret/key/password/roles/capabilities) as the read and list paths, closing a read/write asymmetry.
 * Security: The role and capability map guard is now prefix-aware. Previously only the default-prefix `wp_user_roles` was blocked; on installs with a custom database prefix the real `{prefix}user_roles` and `{prefix}user_settings` options, plus any key ending in `_user_roles` or `_capabilities`, are now blocked on both read and write. This prevents a token holder from rewriting the role-to-capability map to escalate privileges.
@@ -164,6 +175,9 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 * Extension hooks for add-on plugins
 
 == Upgrade Notice ==
+
+= 2.3.2 =
+Security release. Closes a blacklist bypass where a token holder could read or overwrite protected options (including `siteurl` and `active_plugins`) by varying the letter case of the key, blocks transient and upload-path forgery, validates media uploads by content, and stops the posts tools from reaching media and menu items that their own tool group had disabled. Recommended for all installs. No breaking changes; existing connector URLs continue to work.
 
 = 2.3.1 =
 Security release. Closes a privilege-escalation path where a token holder could overwrite sensitive options (including the role/capability map on custom-prefix installs) that the API refuses to read, and adds a size cap on base64 media uploads. Recommended for all installs. No breaking changes; existing connector URLs continue to work.

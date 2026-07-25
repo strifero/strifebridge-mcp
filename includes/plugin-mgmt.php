@@ -20,6 +20,11 @@ function sbmcp_list_plugins() {
 /**
  * Returns the plugin basename of StrifeBridge MCP itself, used by the
  * activate/deactivate/delete handlers to refuse to operate on themselves.
+ *
+ * Callers compare with strcasecmp(): on a case-insensitive filesystem (macOS,
+ * Windows) a path like "StrifeBridge-MCP/strifebridge-mcp.php" resolves to this
+ * same plugin, so an exact === comparison would let it deactivate or delete
+ * itself and take the API offline.
  */
 function sbmcp_self_basename(): string {
     return plugin_basename(SBMCP_PATH . 'strifebridge-mcp.php');
@@ -30,7 +35,7 @@ function sbmcp_activate_plugin(WP_REST_Request $request) {
     $plugin = $request->get_json_params()['plugin'] ?? null;
     if (!$plugin) return new WP_Error('missing_plugin', 'Provide a plugin file.', ['status' => 400]);
     if (validate_file($plugin) !== 0) return new WP_Error('invalid_plugin', 'Invalid plugin path.', ['status' => 400]);
-    if ($plugin === sbmcp_self_basename()) return new WP_Error('forbidden_self', 'StrifeBridge MCP cannot operate on itself.', ['status' => 403]);
+    if (strcasecmp($plugin, sbmcp_self_basename()) === 0) return new WP_Error('forbidden_self', 'StrifeBridge MCP cannot operate on itself.', ['status' => 403]);
     if (!file_exists(WP_PLUGIN_DIR . '/' . $plugin)) return new WP_Error('not_found', 'Plugin not found.', ['status' => 404]);
     $result = activate_plugin($plugin);
     if (is_wp_error($result)) return new WP_Error('activate_error', $result->get_error_message(), ['status' => 400]);
@@ -42,7 +47,7 @@ function sbmcp_deactivate_plugin(WP_REST_Request $request) {
     $plugin = $request->get_json_params()['plugin'] ?? null;
     if (!$plugin) return new WP_Error('missing_plugin', 'Provide a plugin file.', ['status' => 400]);
     if (validate_file($plugin) !== 0) return new WP_Error('invalid_plugin', 'Invalid plugin path.', ['status' => 400]);
-    if ($plugin === sbmcp_self_basename()) return new WP_Error('forbidden_self', 'StrifeBridge MCP cannot operate on itself.', ['status' => 403]);
+    if (strcasecmp($plugin, sbmcp_self_basename()) === 0) return new WP_Error('forbidden_self', 'StrifeBridge MCP cannot operate on itself.', ['status' => 403]);
     deactivate_plugins($plugin);
     return ['status' => 'deactivated', 'plugin' => $plugin];
 }
@@ -58,7 +63,7 @@ function sbmcp_delete_plugin(WP_REST_Request $request) {
         if ($file_slug === $slug) { $plugin_file = $file; break; }
     }
     if (!$plugin_file) return new WP_Error('not_found', 'Plugin not found.', ['status' => 404]);
-    if ($plugin_file === sbmcp_self_basename()) return new WP_Error('forbidden_self', 'StrifeBridge MCP cannot operate on itself.', ['status' => 403]);
+    if (strcasecmp($plugin_file, sbmcp_self_basename()) === 0) return new WP_Error('forbidden_self', 'StrifeBridge MCP cannot operate on itself.', ['status' => 403]);
     if (is_plugin_active($plugin_file)) deactivate_plugins($plugin_file);
     $result = delete_plugins([$plugin_file]);
     if (is_wp_error($result)) return new WP_Error('delete_error', $result->get_error_message(), ['status' => 500]);

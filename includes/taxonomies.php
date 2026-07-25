@@ -10,7 +10,10 @@ if (!defined('ABSPATH')) {
 function sbmcp_list_terms(WP_REST_Request $request) {
     $taxonomy = $request->get_param('taxonomy') ?? 'category';
     if (!taxonomy_exists($taxonomy)) return new WP_Error('invalid_taxonomy', 'Taxonomy does not exist.', ['status' => 400]);
-    $terms = get_terms(['taxonomy' => $taxonomy, 'hide_empty' => false, 'number' => min((int) ($request->get_param('per_page') ?? 100), 500)]);
+    // Floor at 1: get_terms() treats a number <= 0 as "no limit", so per_page=-1
+    // would return every term in the taxonomy.
+    $per_page = min(max((int) ($request->get_param('per_page') ?? 100), 1), 500);
+    $terms = get_terms(['taxonomy' => $taxonomy, 'hide_empty' => false, 'number' => $per_page]);
     if (is_wp_error($terms)) return new WP_Error('query_error', $terms->get_error_message(), ['status' => 500]);
     return array_map(fn($term) => ['id' => $term->term_id, 'name' => $term->name, 'slug' => $term->slug, 'taxonomy' => $term->taxonomy, 'parent' => $term->parent, 'count' => $term->count, 'description' => $term->description], $terms);
 }
