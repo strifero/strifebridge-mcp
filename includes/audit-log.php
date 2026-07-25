@@ -249,6 +249,21 @@ function sbmcp_audit_request_token(): ?string {
 }
 
 /**
+ * Whether IP addresses may be written to the log.
+ *
+ * Stored as its own option rather than inside the sbmcp_safe_mode array
+ * because it defaults to ON: in a checkbox-array setting an unticked box is
+ * indistinguishable from one that was never saved, so a default-on value
+ * cannot be turned off. A standalone option with a default makes both states
+ * explicit.
+ *
+ * @return bool
+ */
+function sbmcp_audit_ip_logging_enabled(): bool {
+    return (bool) get_option('sbmcp_log_ip', 1);
+}
+
+/**
  * Returns the requesting IP address.
  *
  * @return string|null
@@ -302,7 +317,7 @@ function sbmcp_audit_log(string $tool, array $args = [], string $result = 'succe
                 'args_summary' => sbmcp_audit_summarize_args($tool, $args) ?: null,
                 'result'       => $result,
                 'error_msg'    => $error_msg,
-                'ip'           => sbmcp_audit_client_ip(),
+                'ip'           => sbmcp_audit_ip_logging_enabled() ? sbmcp_audit_client_ip() : null,
                 'token_hint'   => sbmcp_audit_token_hint(),
             ],
             ['%s', '%s', '%s', '%s', '%s', '%s', '%s']
@@ -325,6 +340,9 @@ function sbmcp_audit_log(string $tool, array $args = [], string $result = 'succe
  * @return void
  */
 function sbmcp_audit_log_auth_failure(string $reason) {
+    // The throttle key uses the IP even when IP logging is off: it is a hash
+    // held in a 60-second transient, never written to the log table, and
+    // without it the throttle could not tell two sources apart.
     $ip  = sbmcp_audit_client_ip() ?: 'unknown';
     $key = 'sbmcp_authfail_' . md5($ip);
 

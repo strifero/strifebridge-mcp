@@ -127,6 +127,26 @@ function sbmcp_update_post(WP_REST_Request $request) {
     if (!$post) return new WP_Error('not_found', 'Post not found', ['status' => 404]);
     $error = sbmcp_posts_delegated_type_error($post->post_type);
     if ($error) return $error;
+    // Safe Mode: refuse to publish through an update.
+    //
+    // Deliberately a rejection of the transition rather than a blanket force to
+    // 'draft'. Forcing the status would unpublish a live post every time the AI
+    // edited one, which is worse than the thing the setting exists to prevent.
+    // A post that is already published stays published: re-sending its current
+    // status is not a transition, so only a genuine move into publish or future
+    // is blocked.
+    if (sbmcp_safe_mode_enabled('force_draft') && isset($params['status'])) {
+        $requested = (string) $params['status'];
+        $publishing = ['publish', 'future'];
+        if (in_array($requested, $publishing, true) && !in_array($post->post_status, $publishing, true)) {
+            return new WP_Error(
+                'safe_mode_publish_blocked',
+                'Safe Mode "force draft" is enabled in StrifeBridge MCP Settings, so this post cannot be published through the API. Retry without the status field to save the other changes, or publish it yourself in the editor.',
+                ['status' => 403]
+            );
+        }
+    }
+
     $update = ['ID' => $id];
     if (isset($params['content'])) $update['post_content'] = $params['content'];
     if (isset($params['title']))   $update['post_title']   = $params['title'];

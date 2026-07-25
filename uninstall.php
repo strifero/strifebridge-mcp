@@ -20,6 +20,7 @@ delete_option('sbmcp_review_remind_at');
 delete_option('sbmcp_db_version');
 delete_option('sbmcp_safe_mode');
 delete_option('sbmcp_default_author');
+delete_option('sbmcp_log_ip');
 
 // Audit log table and its scheduled prune.
 wp_clear_scheduled_hook('sbmcp_audit_prune_event');

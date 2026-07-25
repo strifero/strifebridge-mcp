@@ -34,7 +34,7 @@ Every tool call is recorded in an activity log — what ran, whether it worked, 
 
 Safe Mode adds guardrails on top of the per-tool-group toggles:
 
-* **Force draft on create** — new posts and pages are always drafts
+* **Never publish** — new posts stay drafts, and updates cannot publish them
 * **Trash instead of delete** — deletions stay recoverable
 * **Read-only mode** — the AI can look but not touch
 
@@ -72,6 +72,18 @@ StrifeBridge MCP works on any self-hosted WordPress installation running WordPre
 = Extending StrifeBridge MCP =
 
 StrifeBridge MCP exposes extension hooks that let add-on plugins register additional MCP tools without modifying the core plugin. Developers can hook into `sbmcp_register_rest_routes`, `sbmcp_mcp_tools`, `sbmcp_mcp_tool_call`, `sbmcp_tool_groups`, and `sbmcp_admin_after_settings` to add routes, tools, admin UI, and tool groups. This is how separately distributed add-ons extend the plugin with features like file editing, database queries, and user management.
+
+== Privacy ==
+
+StrifeBridge MCP keeps an activity log in your own WordPress database, in a table named `{prefix}sbmcp_audit_log`. Each entry records the time of the request, the name of the tool that ran, a short sanitized summary of what it acted on, whether the call succeeded, failed, or was refused, and — unless you turn it off — the IP address the request came from.
+
+* **Nothing leaves your site.** The log is local to your database. The plugin makes no outbound network calls and sends no analytics or telemetry anywhere.
+* **No content or secrets are stored.** Argument summaries are allowlisted per tool, so option values, post content, widget settings, uploaded file data, and API tokens are never written to the log. A tool the plugin does not recognize records no arguments at all.
+* **IP logging is optional.** "Log IP addresses" under Settings &rarr; StrifeBridge MCP &rarr; Safety is on by default and can be switched off, after which new entries store no address. Entries already recorded keep the addresses they were written with; deleting those is a matter of waiting for them to be pruned, or clearing the table.
+* **Entries are pruned automatically.** A daily scheduled task keeps the free version to a rolling window of 30 days or 1000 entries, whichever comes first. Older entries are deleted permanently.
+* **Everything is removed on uninstall.** Deleting the plugin through the WordPress admin drops the log table and removes every option the plugin created. Deactivating alone leaves the log in place, so it survives a temporary deactivation.
+
+If your site is subject to GDPR or similar regulation, note that IP addresses are personal data. Either switch IP logging off, or account for this log in your own privacy policy and retention practices.
 
 == Installation ==
 
@@ -127,7 +139,7 @@ The log never records option values, post content, widget settings, uploaded fil
 
 = How do I stop the AI from publishing or deleting things? =
 
-Settings &rarr; StrifeBridge MCP has a Safety section with three independent toggles. "Force draft on create" makes every new post a draft. "Trash instead of delete" keeps deletions recoverable. "Read-only mode" refuses every tool that would change anything, which is a good way to watch what an assistant wants to do before letting it do so.
+Settings &rarr; StrifeBridge MCP has a Safety section with three independent toggles. "Never publish" makes every new post a draft and refuses any update that would publish or schedule one — editing a post that is already live still works, so turning this on does not take your site down. "Trash instead of delete" keeps deletions recoverable. "Read-only mode" refuses every tool that would change anything, which is a good way to watch what an assistant wants to do before letting it do so.
 
 All three default to off on existing sites, so upgrading never changes how your setup behaves. New installs start with "Trash instead of delete" on.
 
@@ -155,7 +167,8 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 = 2.4.0 =
 * New: Activity log. Every tool call is recorded — the tool, a short sanitized summary of what it acted on, the result, the time, and the requesting IP. Calls refused by a tool group toggle, by Safe Mode, or by a security guard are recorded as denied, and failed authentication attempts are logged too.
 * New: Recent Activity panel in Settings showing the last 10 entries. The free version keeps a rolling window of 30 days or 1000 entries, whichever comes first, pruned daily.
-* New: Safe Mode. Three independent toggles in Settings — force draft on create, trash instead of delete, and a global read-only mode that refuses every tool that would change anything. All default to off on existing sites, so upgrading does not change how your setup behaves. New installs start with "trash instead of delete" on.
+* New: Safe Mode. Three independent toggles in Settings — never publish, trash instead of delete, and a global read-only mode that refuses every tool that would change anything. "Never publish" forces new posts to draft and refuses an update that would publish or schedule a draft, while still allowing edits to posts that are already published. All default to off on existing sites, so upgrading does not change how your setup behaves. New installs start with "trash instead of delete" on.
+* New: IP logging can be switched off. Activity log entries record the requesting IP address by default; the "Log IP addresses" setting turns that off without affecting the rest of the log. See the new Privacy section.
 * New: Configurable author for AI-created posts, defaulting to the oldest administrator. Previously these posts were stored with no author, and showed as authorless in the admin list, feeds, and author archives.
 * Fix: `create_post` now validates the post type and post status against what is actually registered on the site. An unrecognized value previously produced content that was invisible everywhere in the admin. It also refuses `attachment` and `nav_menu_item`, matching the other posts tools.
 * Privacy: the activity log never stores option values, post content, widget settings, uploaded file data, or token values. Argument summaries are allowlisted per tool, and an unrecognized tool records no arguments at all.

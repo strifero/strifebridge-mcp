@@ -91,6 +91,9 @@ function sbmcp_handle_safety() {
     $author = isset($_POST['sbmcp_default_author']) ? (int) $_POST['sbmcp_default_author'] : 0;
     update_option('sbmcp_default_author', ($author > 0 && get_userdata($author)) ? $author : 0);
 
+    // Defaults on, so an absent checkbox means the admin unticked it.
+    update_option('sbmcp_log_ip', isset($_POST['sbmcp_log_ip']) ? 1 : 0);
+
     wp_safe_redirect(admin_url('options-general.php?page=strifebridge-mcp&safety_saved=1')); exit;
 }
 add_action('admin_init', 'sbmcp_handle_safety');
@@ -126,6 +129,7 @@ function sbmcp_settings_page() {
     $safety_options      = sbmcp_safe_mode_options();
     $recent_activity     = sbmcp_audit_log_query(['limit' => 10]);
     $current_author      = (int) get_option('sbmcp_default_author', 0);
+    $log_ip              = sbmcp_audit_ip_logging_enabled();
 
     // Review nag logic
     $activated_at   = get_option('sbmcp_activated_at', 0);
@@ -306,6 +310,17 @@ function sbmcp_settings_page() {
                                 </div>
                             </label>
                             <?php endforeach; ?>
+                        </div>
+
+                        <hr class="sb-divider">
+                        <div class="sb-tools-grid">
+                            <label class="sb-tool-item">
+                                <input type="checkbox" name="sbmcp_log_ip" value="1" <?php checked($log_ip); ?>>
+                                <div>
+                                    <div class="sb-tool-label"><?php esc_html_e('Log IP addresses', 'strifebridge-mcp'); ?></div>
+                                    <div class="sb-tool-desc"><?php esc_html_e('Record the IP address each request came from in the activity log. Turn this off if you would rather not store it; everything else about the log is unchanged, and existing entries keep the addresses already recorded.', 'strifebridge-mcp'); ?></div>
+                                </div>
+                            </label>
                         </div>
 
                         <hr class="sb-divider">
