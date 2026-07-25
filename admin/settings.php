@@ -72,6 +72,29 @@ function sbmcp_handle_tool_toggles() {
 }
 add_action('admin_init', 'sbmcp_handle_tool_toggles');
 
+function sbmcp_handle_safety() {
+    if (!isset($_POST['sbmcp_save_safety'])) return;
+    check_admin_referer('sbmcp_safety');
+    if (!current_user_can('manage_options')) wp_die(esc_html__('Unauthorized', 'strifebridge-mcp'));
+
+    $valid  = array_keys(sbmcp_safe_mode_options());
+    $posted = isset($_POST['sbmcp_safe_mode']) && is_array($_POST['sbmcp_safe_mode'])
+                  ? array_map('sanitize_key', wp_unslash($_POST['sbmcp_safe_mode']))
+                  : [];
+
+    $modes = [];
+    foreach ($valid as $key) {
+        if (in_array($key, $posted, true)) $modes[$key] = 1;
+    }
+    update_option('sbmcp_safe_mode', $modes);
+
+    $author = isset($_POST['sbmcp_default_author']) ? (int) $_POST['sbmcp_default_author'] : 0;
+    update_option('sbmcp_default_author', ($author > 0 && get_userdata($author)) ? $author : 0);
+
+    wp_safe_redirect(admin_url('options-general.php?page=strifebridge-mcp&safety_saved=1')); exit;
+}
+add_action('admin_init', 'sbmcp_handle_safety');
+
 function sbmcp_handle_dismiss_review() {
     if (!isset($_POST['sbmcp_dismiss_review'])) return;
     check_admin_referer('sbmcp_dismiss_review');
@@ -98,6 +121,11 @@ function sbmcp_settings_page() {
     $api_just_enabled    = isset($_GET['api_enabled']);
     $regenerated         = isset($_GET['regenerated']);
     $tools_saved         = isset($_GET['tools_saved']);
+    $safety_saved        = isset($_GET['safety_saved']);
+    $safe_modes          = sbmcp_safe_mode();
+    $safety_options      = sbmcp_safe_mode_options();
+    $recent_activity     = sbmcp_audit_log_query(['limit' => 10]);
+    $current_author      = (int) get_option('sbmcp_default_author', 0);
 
     // Review nag logic
     $activated_at   = get_option('sbmcp_activated_at', 0);
@@ -164,6 +192,7 @@ function sbmcp_settings_page() {
         <?php if ($api_just_enabled): ?><div class="notice notice-success is-dismissible"><p><strong><?php esc_html_e('API re-enabled.', 'strifebridge-mcp'); ?></strong></p></div><?php endif; ?>
         <?php if ($regenerated): ?><div class="notice notice-success is-dismissible"><p><strong><?php esc_html_e('Token regenerated.', 'strifebridge-mcp'); ?></strong> <?php esc_html_e('Update your connector URL in Claude.ai.', 'strifebridge-mcp'); ?></p></div><?php endif; ?>
         <?php if ($tools_saved): ?><div class="notice notice-success is-dismissible"><p><strong><?php esc_html_e('Tool settings saved.', 'strifebridge-mcp'); ?></strong></p></div><?php endif; ?>
+        <?php if ($safety_saved): ?><div class="notice notice-success is-dismissible"><p><strong><?php esc_html_e('Safety settings saved.', 'strifebridge-mcp'); ?></strong></p></div><?php endif; ?>
 
         <div class="sb-layout">
             <div class="sb-main">
@@ -189,6 +218,49 @@ function sbmcp_settings_page() {
                     </div>
                 </div>
 
+                <!-- Recent Activity -->
+                <div class="sb-card">
+                    <h2><?php esc_html_e('Recent Activity', 'strifebridge-mcp'); ?></h2>
+                    <p><?php esc_html_e('Every tool call is recorded — what ran, whether it worked, and where it came from. Refused calls and failed sign-in attempts appear here too.', 'strifebridge-mcp'); ?></p>
+
+                    <?php if (empty($recent_activity)): ?>
+                        <p class="sb-tool-desc"><?php esc_html_e('No activity recorded yet. Once your AI assistant connects and starts working, its actions will show up here.', 'strifebridge-mcp'); ?></p>
+                    <?php else: ?>
+                        <table class="wp-list-table widefat striped sb-activity">
+                            <thead>
+                                <tr>
+                                    <th><?php esc_html_e('Time', 'strifebridge-mcp'); ?></th>
+                                    <th><?php esc_html_e('Tool', 'strifebridge-mcp'); ?></th>
+                                    <th><?php esc_html_e('Details', 'strifebridge-mcp'); ?></th>
+                                    <th><?php esc_html_e('Result', 'strifebridge-mcp'); ?></th>
+                                    <th><?php esc_html_e('IP', 'strifebridge-mcp'); ?></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            <?php foreach ($recent_activity as $row): ?>
+                                <tr>
+                                    <td><?php echo esc_html(get_date_from_gmt($row['ts'], 'Y-m-d H:i')); ?></td>
+                                    <td><code><?php echo esc_html($row['tool']); ?></code></td>
+                                    <td class="sb-tool-desc"><?php echo esc_html($row['args_summary'] ?? ''); ?></td>
+                                    <td>
+                                        <span class="sb-result sb-result-<?php echo esc_attr($row['result']); ?>"><?php echo esc_html($row['result']); ?></span>
+                                        <?php if (!empty($row['error_msg'])): ?>
+                                            <div class="sb-tool-desc"><?php echo esc_html($row['error_msg']); ?></div>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="sb-tool-desc"><?php echo esc_html($row['ip'] ?? ''); ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php endif; ?>
+
+                    <p class="sb-tool-desc sb-activity-upsell">
+                        <?php esc_html_e('Showing the last 10 actions. StrifeBridge MCP Pro keeps full searchable history with CSV export.', 'strifebridge-mcp'); ?>
+                        <a href="https://strifetech.com/strifebridge-mcp/#pricing" target="_blank" rel="noopener"><?php esc_html_e('Learn more →', 'strifebridge-mcp'); ?></a>
+                    </p>
+                </div>
+
                 <!-- Tool Settings -->
                 <div class="sb-card">
                     <h2><?php esc_html_e('Tool Settings', 'strifebridge-mcp'); ?></h2>
@@ -212,6 +284,51 @@ function sbmcp_settings_page() {
                             <?php endforeach; ?>
                         </div>
                         <button type="submit" name="sbmcp_save_tools" class="button button-primary"><?php esc_html_e('Save Tool Settings', 'strifebridge-mcp'); ?></button>
+                    </form>
+                </div>
+
+                <!-- Safety -->
+                <div class="sb-card">
+                    <h2><?php esc_html_e('Safety', 'strifebridge-mcp'); ?></h2>
+                    <p><?php esc_html_e('Guardrails on what the AI is allowed to do. These apply to every connected assistant, on top of the tool group settings above.', 'strifebridge-mcp'); ?></p>
+                    <form method="post">
+                        <?php wp_nonce_field('sbmcp_safety'); ?>
+                        <div class="sb-tools-grid">
+                            <?php foreach ($safety_options as $slug => $option): ?>
+                            <label class="sb-tool-item">
+                                <input type="checkbox"
+                                       name="sbmcp_safe_mode[]"
+                                       value="<?php echo esc_attr($slug); ?>"
+                                       <?php checked(!empty($safe_modes[$slug])); ?>>
+                                <div>
+                                    <div class="sb-tool-label"><?php echo esc_html($option['label']); ?></div>
+                                    <div class="sb-tool-desc"><?php echo esc_html($option['description']); ?></div>
+                                </div>
+                            </label>
+                            <?php endforeach; ?>
+                        </div>
+
+                        <hr class="sb-divider">
+                        <div class="sb-field">
+                            <label for="sb-default-author"><?php esc_html_e('Author for AI-created posts', 'strifebridge-mcp'); ?></label>
+                            <div class="sb-tool-desc sb-mb-20"><?php esc_html_e('Requests authenticated with the token have no logged-in user, so new posts need an author to be attributed to. Defaults to the oldest administrator.', 'strifebridge-mcp'); ?></div>
+                            <?php
+                            wp_dropdown_users([
+                                'name'             => 'sbmcp_default_author',
+                                'id'               => 'sb-default-author',
+                                'selected'         => $current_author,
+                                'include_selected' => true,
+                                'show_option_none' => __('Default (oldest administrator)', 'strifebridge-mcp'),
+                                'option_none_value' => 0,
+                                // role__in rather than the newer 'capability' arg:
+                                // 'capability' only landed in WP 5.9 and this plugin
+                                // supports 5.6.
+                                'role__in'         => ['administrator', 'editor', 'author'],
+                            ]);
+                            ?>
+                        </div>
+
+                        <button type="submit" name="sbmcp_save_safety" class="button button-primary"><?php esc_html_e('Save Safety Settings', 'strifebridge-mcp'); ?></button>
                     </form>
                 </div>
 
