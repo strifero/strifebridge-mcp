@@ -76,7 +76,34 @@ function sbmcp_get_post(WP_REST_Request $request) {
 
 function sbmcp_create_post(WP_REST_Request $request) {
     $params = $request->get_json_params();
-    $post_data = ['post_title' => $params['title'] ?? 'Untitled', 'post_content' => $params['content'] ?? '', 'post_status' => $params['status'] ?? 'draft', 'post_type' => $params['type'] ?? 'post'];
+
+    // Validate the post type: an unregistered type used to be accepted
+    // silently, producing content that never appears anywhere in the admin.
+    $type  = (string) ($params['type'] ?? 'post');
+    $error = sbmcp_posts_delegated_type_error($type);
+    if ($error) return $error;
+    if (!post_type_exists($type)) {
+        return new WP_Error('invalid_post_type', sprintf('Post type "%s" is not registered on this site.', $type), ['status' => 400]);
+    }
+
+    $status = (string) ($params['status'] ?? 'draft');
+    // Safe Mode: force every new post to draft, whatever was requested.
+    if (sbmcp_safe_mode_enabled('force_draft')) {
+        $status = 'draft';
+    }
+    if (!get_post_status_object($status)) {
+        return new WP_Error('invalid_post_status', sprintf('Post status "%s" is not registered on this site.', $status), ['status' => 400]);
+    }
+
+    $post_data = ['post_title' => $params['title'] ?? 'Untitled', 'post_content' => $params['content'] ?? '', 'post_status' => $status, 'post_type' => $type];
+
+    // Token requests carry no logged-in user, so without this the post is
+    // stored with post_author = 0 and shows as authorless everywhere.
+    $author = sbmcp_default_author();
+    if ($author > 0) {
+        $post_data['post_author'] = $author;
+    }
+
     if (!empty($params['meta']) && is_array($params['meta'])) {
         $meta = sbmcp_filter_public_meta($params['meta']);
         if (!empty($meta)) $post_data['meta_input'] = $meta;
@@ -126,6 +153,19 @@ function sbmcp_delete_post(WP_REST_Request $request) {
     if (!$post) return new WP_Error('not_found', 'Post not found', ['status' => 404]);
     $error = sbmcp_posts_delegated_type_error($post->post_type);
     if ($error) return $error;
+
+    // Safe Mode: never delete permanently, whatever force says. The post goes
+    // to the trash and stays recoverable.
+    if (sbmcp_safe_mode_enabled('trash_not_delete')) {
+        if ($post->post_status === 'trash') {
+            return ['status' => 'trashed', 'id' => $id];
+        }
+        if (!wp_trash_post($id)) {
+            return new WP_Error('delete_error', 'Could not trash post.', ['status' => 500]);
+        }
+        return ['status' => 'trashed', 'id' => $id];
+    }
+
     $result = wp_delete_post($id, $force);
     if (!$result) return new WP_Error('delete_error', 'Could not delete post.', ['status' => 500]);
     return ['status' => $force ? 'deleted' : 'trashed', 'id' => $id];

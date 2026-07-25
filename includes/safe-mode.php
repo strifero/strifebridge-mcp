@@ -53,7 +53,7 @@ function sbmcp_safe_mode_options(): array {
     return [
         'force_draft' => [
             'label'       => 'Force draft on create',
-            'description' => 'New posts and pages are always created as drafts, whatever status the AI asks for. Nothing gets published without you.',
+            'description' => 'New posts and pages are always created as drafts, whatever status the AI asks for. Note that this covers creation only — an existing post can still be published through an update.',
         ],
         'trash_not_delete' => [
             'label'       => 'Trash instead of delete',
