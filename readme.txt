@@ -28,6 +28,16 @@ StrifeBridge MCP exposes a structured, token-authenticated REST API and MCP serv
 * List users and inspect their roles
 * Get site info, flush rewrite rules
 
+= See and control what the AI does =
+
+Every tool call is recorded in an activity log — what ran, whether it worked, and where the request came from, including refused calls and failed sign-in attempts. The Settings screen shows recent activity at a glance.
+
+Safe Mode adds guardrails on top of the per-tool-group toggles:
+
+* **Force draft on create** — new posts and pages are always drafts
+* **Trash instead of delete** — deletions stay recoverable
+* **Read-only mode** — the AI can look but not touch
+
 = How it works =
 
 1. Install and activate the plugin
@@ -109,6 +119,26 @@ Speed and accuracy. Instead of asking the AI for code, switching tabs, copying i
 
 Yes. The plugin exposes extension hooks (`sbmcp_register_rest_routes`, `sbmcp_mcp_tools`, `sbmcp_mcp_tool_call`, `sbmcp_tool_groups`) that let you register additional routes and tools from your own code.
 
+= Can I see what the AI has actually done? =
+
+Yes. Settings &rarr; StrifeBridge MCP has a Recent Activity panel showing the last 10 tool calls: the time, which tool ran, a short summary of what it was pointed at, the result, and the requesting IP. Refused calls and failed authentication attempts are recorded too, so a wrong token shows up in the log.
+
+The log never records option values, post content, widget settings, uploaded file data, or your token. Only an allowlisted summary per tool (for example `id=42` or `key=blogname`) is kept, so the log is safe to export or hand to a client. The free version keeps a rolling window of 30 days or 1000 entries, whichever comes first.
+
+= How do I stop the AI from publishing or deleting things? =
+
+Settings &rarr; StrifeBridge MCP has a Safety section with three independent toggles. "Force draft on create" makes every new post a draft. "Trash instead of delete" keeps deletions recoverable. "Read-only mode" refuses every tool that would change anything, which is a good way to watch what an assistant wants to do before letting it do so.
+
+All three default to off on existing sites, so upgrading never changes how your setup behaves. New installs start with "Trash instead of delete" on.
+
+= Why did my `<script>` or `<iframe>` disappear from a post? =
+
+WordPress strips unsafe HTML from post content unless the user saving it has the `unfiltered_html` capability. Requests authenticated with the StrifeBridge token have no logged-in WordPress user, so that capability is not present and WordPress applies its normal filtering. Standard block markup, formatting, links, and images are unaffected; `<script>`, `<iframe>`, and similar tags are removed. This is WordPress behaving as designed, not a plugin bug.
+
+= Who is shown as the author of posts the AI creates? =
+
+By default the oldest administrator account. You can pick a different user under Settings &rarr; StrifeBridge MCP &rarr; Safety. Before version 2.4.0 these posts had no author at all.
+
 = Can I disable individual tool groups? =
 
 Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, media, options, menus, users, plugins, widgets, taxonomies, system). Turn off anything you do not want the AI to access.
@@ -121,6 +151,15 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 4. Tool group toggles and community sidebar in the admin settings
 
 == Changelog ==
+
+= 2.4.0 =
+* New: Activity log. Every tool call is recorded — the tool, a short sanitized summary of what it acted on, the result, the time, and the requesting IP. Calls refused by a tool group toggle, by Safe Mode, or by a security guard are recorded as denied, and failed authentication attempts are logged too.
+* New: Recent Activity panel in Settings showing the last 10 entries. The free version keeps a rolling window of 30 days or 1000 entries, whichever comes first, pruned daily.
+* New: Safe Mode. Three independent toggles in Settings — force draft on create, trash instead of delete, and a global read-only mode that refuses every tool that would change anything. All default to off on existing sites, so upgrading does not change how your setup behaves. New installs start with "trash instead of delete" on.
+* New: Configurable author for AI-created posts, defaulting to the oldest administrator. Previously these posts were stored with no author, and showed as authorless in the admin list, feeds, and author archives.
+* Fix: `create_post` now validates the post type and post status against what is actually registered on the site. An unrecognized value previously produced content that was invisible everywhere in the admin. It also refuses `attachment` and `nav_menu_item`, matching the other posts tools.
+* Privacy: the activity log never stores option values, post content, widget settings, uploaded file data, or token values. Argument summaries are allowlisted per tool, and an unrecognized tool records no arguments at all.
+* Developers: add-ons can extend the log through the `sbmcp_audit_log_retention_days` and `sbmcp_audit_log_retention_rows` filters, the `sbmcp_audit_log_query()` accessor, and the `sbmcp_audit_should_log` filter.
 
 = 2.3.3 =
 * Fix (data loss): `update_option` stored JSON as a literal string. The `value` parameter was documented as "pass objects/arrays as JSON-encoded string", which read as a promise to decode, but the text was written to `wp_options` verbatim. Any option WordPress stores as a serialized array received a string instead, and the plugin that owned the option silently fell back to its defaults. This took a live site's Rank Math configuration offline. `update_option` now takes an explicit `json` parameter with three distinct states: `json: true` decodes the value and stores it as an array, so WordPress serializes it natively; `json: false` stores the value as a literal string, unchanged, which is how a genuine JSON string gets written; and omitting `json` entirely causes a JSON-looking value to be **rejected** with a message naming both flags, rather than being guessed at or silently stored. Values that are not JSON are stored exactly as before, whether or not the flag is present.
@@ -187,6 +226,9 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 * Extension hooks for add-on plugins
 
 == Upgrade Notice ==
+
+= 2.4.0 =
+Adds an activity log so you can see exactly what your AI assistant has done, and Safe Mode guardrails (force draft, trash instead of delete, read-only). Safe Mode defaults to off on existing sites, so nothing about your current setup changes on upgrade. Also fixes AI-created posts having no author.
 
 = 2.3.3 =
 Bug-fix release, recommended for all users. Fixes two data-loss bugs: `update_option` wrote JSON as a literal string, corrupting any option WordPress stores as an array, and `delete_post` permanently deleted posts when passed `force=false` over a query string. `update_option` takes a new `json` parameter for storing arrays; a JSON-looking value passed without it is now rejected rather than stored incorrectly, so any existing call that relied on writing literal JSON text into an array option will now return a clear error instead of silently corrupting the option. If the literal string really was intended, pass `json: false` to store it unchanged.
