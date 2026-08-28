@@ -81,7 +81,11 @@ function sbmcp_register_routes_for_namespace($ns, $auth) {
     }
     if (sbmcp_tool_enabled('options')) {
         register_rest_route($ns, '/option',  ['methods' => 'GET',  'callback' => 'sbmcp_get_option',    'permission_callback' => $auth]);
-        register_rest_route($ns, '/option',  ['methods' => 'POST', 'callback' => 'sbmcp_update_option', 'permission_callback' => $auth]);
+        register_rest_route($ns, '/option',  ['methods' => 'POST', 'callback' => 'sbmcp_update_option', 'permission_callback' => $auth, 'args' => [
+            // Declared so the flag is part of the documented REST contract, not
+            // just an undocumented body key. Handler coerces via sbmcp_to_bool().
+            'json' => ['type' => 'boolean', 'required' => false, 'default' => false, 'description' => 'Decode value as JSON and store the resulting array.'],
+        ]]);
         register_rest_route($ns, '/options', ['methods' => 'GET',  'callback' => 'sbmcp_list_options',  'permission_callback' => $auth]);
     }
     if (sbmcp_tool_enabled('users')) {

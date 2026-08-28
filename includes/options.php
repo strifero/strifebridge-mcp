@@ -115,6 +115,81 @@ function sbmcp_get_option(WP_REST_Request $request) {
     return ['key' => $key, 'value' => $value];
 }
 
+/**
+ * Resolves the value update_option() should actually store.
+ *
+ * Before 2.3.3 the value was written verbatim, so an option that WordPress
+ * stores as a serialized array (a plugin settings blob, for example) received
+ * the literal JSON text instead. Nothing errored: the row was written, and the
+ * owning plugin then read a string where it expected an array and silently fell
+ * back to defaults. A live site lost its Rank Math configuration this way.
+ *
+ * The fix is explicit rather than automatic. Auto-decoding anything that looked
+ * like JSON would change the meaning of existing calls on upgrade and would take
+ * away the ability to store a literal JSON string, so instead:
+ *
+ *  - json=true  decodes and requires an array, letting WordPress serialize it.
+ *  - json unset/false with a JSON-looking value is rejected, not guessed at.
+ *
+ * @param mixed $value Caller-supplied value.
+ * @param bool  $json  Whether the caller asked for JSON decoding.
+ * @return array|WP_Error ['value' => mixed, 'stored_as' => string] or an error.
+ */
+function sbmcp_resolve_option_value($value, bool $json) {
+    if ($json) {
+        // Already structured (a REST caller sent a real object/array rather than
+        // an encoded string): nothing to decode, WordPress serializes it as-is.
+        if (is_array($value)) {
+            return ['value' => $value, 'stored_as' => 'array'];
+        }
+        if (!is_string($value)) {
+            return new WP_Error(
+                'json_not_string',
+                'json: true requires value to be a JSON-encoded string or an array.',
+                ['status' => 400]
+            );
+        }
+        $decoded = json_decode($value, true);
+        if (json_last_error() !== JSON_ERROR_NONE) {
+            return new WP_Error(
+                'json_invalid',
+                sprintf('Value is not valid JSON: %s', json_last_error_msg()),
+                ['status' => 400]
+            );
+        }
+        // A bare scalar ("5", "true", '"text"') is valid JSON but decodes to a
+        // scalar, which needs no decoding to store and almost certainly means the
+        // caller passed json: true by mistake. Reject rather than store something
+        // subtly different from what was sent.
+        if (!is_array($decoded)) {
+            return new WP_Error(
+                'json_not_array',
+                'json: true expects a JSON object or array. Pass the value without json: true to store a scalar.',
+                ['status' => 400]
+            );
+        }
+        return ['value' => $decoded, 'stored_as' => 'array'];
+    }
+
+    // No json flag: refuse to guess at a value that looks like encoded JSON.
+    if (is_string($value)) {
+        $trimmed = trim($value);
+        if ($trimmed !== '' && ($trimmed[0] === '{' || $trimmed[0] === '[')) {
+            $probe = json_decode($trimmed, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($probe)) {
+                return new WP_Error(
+                    'json_value_ambiguous',
+                    'Value appears to be JSON. Pass json: true to store it as an array, or pass the value as a non-JSON string if a literal string is intended.',
+                    ['status' => 400]
+                );
+            }
+        }
+    }
+
+    // Reported so a caller can confirm the value landed as the type they meant.
+    return ['value' => $value, 'stored_as' => gettype($value)];
+}
+
 function sbmcp_update_option(WP_REST_Request $request) {
     $params = $request->get_json_params();
     $key    = $params['key']   ?? null;
@@ -126,6 +201,12 @@ function sbmcp_update_option(WP_REST_Request $request) {
     // Without this the reader blocks it but the writer would happily overwrite a
     // third-party plugin's stored secret with an attacker-chosen value.
     if (sbmcp_option_is_sensitive($key)) return new WP_Error('forbidden_sensitive_option', 'This option key matches a sensitive pattern (key/secret/token/password) and cannot be modified via the API.', ['status' => 403]);
+
+    // Resolve what actually gets stored BEFORE the unchanged-check, so the
+    // comparison below is against the real target value and not its JSON source.
+    $decoded = sbmcp_resolve_option_value($value, sbmcp_to_bool($request->get_param('json'), false));
+    if (is_wp_error($decoded)) return $decoded;
+    $value = $decoded['value'];
 
     // Distinguish a genuine no-op from a failed write. update_option() returns
     // false both when the stored value already equals the new one and when the
@@ -139,7 +220,7 @@ function sbmcp_update_option(WP_REST_Request $request) {
     if (!update_option($key, $value)) {
         return new WP_Error('update_failed', 'The option value could not be written.', ['status' => 500]);
     }
-    return ['status' => 'updated', 'key' => $key];
+    return ['status' => 'updated', 'key' => $key, 'stored_as' => $decoded['stored_as']];
 }
 
 function sbmcp_list_options(WP_REST_Request $request) {
