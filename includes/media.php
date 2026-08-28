@@ -43,6 +43,15 @@ function sbmcp_upload_media(WP_REST_Request $request) {
         if (!wp_http_validate_url($url)) {
             return new WP_Error('invalid_url', 'URL failed validation (private/loopback addresses are blocked).', ['status' => 400]);
         }
+        // media_sideload_image() derives the attachment filename from the URL and
+        // offers no way to override it, so a caller-supplied filename used to be
+        // accepted and then discarded: uploading .../tmp-bar.jpg with
+        // filename "foo.jpg" produced an attachment named tmp-bar.jpg. Route the
+        // named case through download_url() + media_handle_sideload(), which does
+        // take the filename, rather than silently ignoring the parameter.
+        if ($name !== null && $name !== '') {
+            return sbmcp_sideload_named_url($url, $name, $title);
+        }
         $id = media_sideload_image($url, 0, $title, 'id');
         if (is_wp_error($id)) return new WP_Error('upload_error', $id->get_error_message(), ['status' => 500]);
         return ['status' => 'uploaded', 'id' => $id, 'url' => wp_get_attachment_url($id)];
@@ -102,6 +111,56 @@ function sbmcp_upload_media(WP_REST_Request $request) {
     }
 
     return new WP_Error('missing_fields', 'Provide url, or base64 + filename.', ['status' => 400]);
+}
+
+/**
+ * Sideloads a URL under a caller-supplied filename.
+ *
+ * media_sideload_image() names the attachment after the source URL, so honouring
+ * the filename parameter means fetching the file ourselves and handing
+ * media_handle_sideload() the name we want.
+ *
+ * media_sideload_image() only ever accepted image URLs (it matches the URL
+ * against a fixed list of image extensions and errors otherwise), so this path
+ * enforces the same images-only contract against the supplied filename instead.
+ * Without that check, routing through media_handle_sideload() would quietly widen
+ * the URL upload path to every type in the allowed-mimes map.
+ *
+ * @param string      $url   Validated http/https source URL.
+ * @param string      $name  Caller-supplied filename.
+ * @param string|null $title Optional attachment title.
+ * @return array|WP_Error
+ */
+function sbmcp_sideload_named_url(string $url, string $name, $title = null) {
+    // Strip any directory component before sanitizing so a filename like
+    // "../../evil.jpg" cannot influence where the file is written.
+    $name = sanitize_file_name(basename($name));
+    if ($name === '') {
+        return new WP_Error('invalid_filename', 'filename is not a usable file name.', ['status' => 400]);
+    }
+    if (strtolower(pathinfo($name, PATHINFO_EXTENSION)) === 'svg') {
+        return new WP_Error('disallowed_type', 'SVG uploads are not supported.', ['status' => 400]);
+    }
+    // Checked before fetching so a rejected type costs no network request.
+    $filetype = wp_check_filetype($name);
+    if (empty($filetype['type']) || strpos($filetype['type'], 'image/') !== 0) {
+        return new WP_Error('disallowed_type', 'filename must use an image extension (jpg, png, gif, webp, avif).', ['status' => 400]);
+    }
+
+    $tmp = download_url($url);
+    if (is_wp_error($tmp)) {
+        return new WP_Error('upload_error', $tmp->get_error_message(), ['status' => 500]);
+    }
+
+    // media_handle_sideload() takes the name from $file_array['name'] and
+    // content-sniffs the fetched bytes, correcting the extension if they disagree.
+    $file_array = ['name' => $name, 'tmp_name' => $tmp];
+    $id = media_handle_sideload($file_array, 0, $title);
+    if (is_wp_error($id)) {
+        if (file_exists($tmp)) @unlink($tmp);
+        return new WP_Error('upload_error', $id->get_error_message(), ['status' => 500]);
+    }
+    return ['status' => 'uploaded', 'id' => $id, 'url' => wp_get_attachment_url($id)];
 }
 
 function sbmcp_delete_media(WP_REST_Request $request) {
