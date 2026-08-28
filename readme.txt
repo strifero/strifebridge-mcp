@@ -4,7 +4,7 @@ Tags: mcp, claude, ai, automation, rest-api
 Requires at least: 5.6
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 2.3.2
+Stable tag: 2.3.3
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -122,6 +122,17 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 
 == Changelog ==
 
+= 2.3.3 =
+* Fix (data loss): `update_option` stored JSON as a literal string. The `value` parameter was documented as "pass objects/arrays as JSON-encoded string", which read as a promise to decode, but the text was written to `wp_options` verbatim. Any option WordPress stores as a serialized array received a string instead, and the plugin that owned the option silently fell back to its defaults. This took a live site's Rank Math configuration offline. `update_option` now takes an explicit `json` parameter: pass `json: true` to have the value decoded and stored as an array, so WordPress serializes it natively. Passing a JSON-looking value **without** `json: true` is now rejected with a message naming the flag, rather than being guessed at or silently stored. Values that are not JSON are stored exactly as before.
+* Fix (data loss): `delete_post` treated `force=false` as true and permanently deleted a post the caller asked to trash. The value was cast with `(bool)`, and PHP evaluates the string `"false"` as true, so any query-string or form caller hit this; JSON callers sent a real boolean and were unaffected, which is why it went unnoticed. All boolean parameters now route through a shared helper that treats `"false"`, `"0"`, `""` and `0` as false.
+* Fix: `upload_media` accepted a `filename` alongside a source `url` and then discarded it, naming the attachment after the URL instead. `filename` is now honoured on the URL path. It must carry an image extension, matching the images-only contract the URL path always had.
+* Fix: `update_post` returned a PHP 8 fatal error when the request had no JSON body.
+* Fix: `update_post` no longer errors on a request body that sets `thumbnail_id` to null.
+* Fix: `upload_media` now returns a proper error when the attachment record cannot be created, instead of reporting a successful upload with `id: 0` and leaving the uploaded file orphaned.
+* Fix: removed a PHP 8.1+ deprecation notice when listing or fetching media items that have no attached file.
+* Change: validation errors now name the parameter that is missing, in the form `Missing required parameter: slug`, using the actual schema key. Messages such as "Provide a plugin slug." described the value without naming the key to send.
+* Docs: the `update_option` description now states that it is the recommended, cache-safe way to write options, and that direct SQL writes to the options table bypass the object cache.
+
 = 2.3.2 =
 * Security: The options tool guards are now case- and whitespace-normalized. `wp_options.option_name` is matched case-insensitively by MySQL and WordPress trims option keys before querying, so a key such as `SITEURL` or ` siteurl` previously slipped past the case-sensitive blacklist and still resolved to the real row. Every guard now compares the same normalized key the database does, on the read, write, and list paths.
 * Security: Transients can no longer be written through the options tool. A forged `_site_transient_update_plugins` record could point WordPress at an attacker-supplied package URL and have the next auto-update install it.
@@ -175,6 +186,9 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 * Extension hooks for add-on plugins
 
 == Upgrade Notice ==
+
+= 2.3.3 =
+Bug-fix release, recommended for all users. Fixes two data-loss bugs: `update_option` wrote JSON as a literal string, corrupting any option WordPress stores as an array, and `delete_post` permanently deleted posts when passed `force=false` over a query string. `update_option` takes a new `json` parameter for storing arrays; a JSON-looking value passed without it is now rejected rather than stored incorrectly, so any existing call that relied on writing literal JSON text into an array option will now return a clear error instead of silently corrupting the option.
 
 = 2.3.2 =
 Security release. Closes a blacklist bypass where a token holder could read or overwrite protected options (including `siteurl` and `active_plugins`) by varying the letter case of the key, blocks transient and upload-path forgery, validates media uploads by content, and stops the posts tools from reaching media and menu items that their own tool group had disabled. Recommended for all installs. No breaking changes; existing connector URLs continue to work.
