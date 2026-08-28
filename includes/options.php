@@ -125,18 +125,23 @@ function sbmcp_get_option(WP_REST_Request $request) {
  * back to defaults. A live site lost its Rank Math configuration this way.
  *
  * The fix is explicit rather than automatic. Auto-decoding anything that looked
- * like JSON would change the meaning of existing calls on upgrade and would take
- * away the ability to store a literal JSON string, so instead:
+ * like JSON would change the meaning of existing calls on upgrade, so the flag
+ * has three distinct states and absent is not the same as false:
  *
- *  - json=true  decodes and requires an array, letting WordPress serialize it.
- *  - json unset/false with a JSON-looking value is rejected, not guessed at.
+ *  - json=true   decode, require an array, let WordPress serialize it.
+ *  - json=false  store verbatim. The caller has said they mean the literal
+ *                string, so a JSON-looking value is written as text, no
+ *                rejection. This is how a literal JSON string gets stored.
+ *  - json absent no instruction given, so a JSON-looking value is rejected
+ *                rather than guessed at. Anything else is stored verbatim.
  *
- * @param mixed $value Caller-supplied value.
- * @param bool  $json  Whether the caller asked for JSON decoding.
+ * @param mixed     $value Caller-supplied value.
+ * @param bool|null $json  true to decode, false to store literally, null when
+ *                         the caller did not send the flag at all.
  * @return array|WP_Error ['value' => mixed, 'stored_as' => string] or an error.
  */
-function sbmcp_resolve_option_value($value, bool $json) {
-    if ($json) {
+function sbmcp_resolve_option_value($value, ?bool $json) {
+    if ($json === true) {
         // Already structured (a REST caller sent a real object/array rather than
         // an encoded string): nothing to decode, WordPress serializes it as-is.
         if (is_array($value)) {
@@ -171,7 +176,14 @@ function sbmcp_resolve_option_value($value, bool $json) {
         return ['value' => $decoded, 'stored_as' => 'array'];
     }
 
-    // No json flag: refuse to guess at a value that looks like encoded JSON.
+    // json: false is an explicit "store this literally". The caller has said what
+    // they mean, so a JSON-looking value is written verbatim with no rejection.
+    // This is the escape hatch for genuinely storing JSON text in an option.
+    if ($json === false) {
+        return ['value' => $value, 'stored_as' => gettype($value)];
+    }
+
+    // json absent: refuse to guess at a value that looks like encoded JSON.
     if (is_string($value)) {
         $trimmed = trim($value);
         if ($trimmed !== '' && ($trimmed[0] === '{' || $trimmed[0] === '[')) {
@@ -179,7 +191,7 @@ function sbmcp_resolve_option_value($value, bool $json) {
             if (json_last_error() === JSON_ERROR_NONE && is_array($probe)) {
                 return new WP_Error(
                     'json_value_ambiguous',
-                    'Value appears to be JSON. Pass json: true to store it as an array, or pass the value as a non-JSON string if a literal string is intended.',
+                    'Value appears to be JSON. Pass json: true to store it as an array, or json: false to store it as a literal string.',
                     ['status' => 400]
                 );
             }
@@ -205,7 +217,10 @@ function sbmcp_update_option(WP_REST_Request $request) {
 
     // Resolve what actually gets stored BEFORE the unchanged-check, so the
     // comparison below is against the real target value and not its JSON source.
-    $decoded = sbmcp_resolve_option_value($value, sbmcp_to_bool($request->get_param('json'), false));
+    // Read raw: null (absent) must stay distinct from an explicit false, so the
+    // coercion only runs when the caller actually sent something.
+    $json_param = $request->get_param('json');
+    $decoded = sbmcp_resolve_option_value($value, $json_param === null ? null : sbmcp_to_bool($json_param));
     if (is_wp_error($decoded)) return $decoded;
     $value = $decoded['value'];
 

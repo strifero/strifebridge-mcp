@@ -83,8 +83,10 @@ function sbmcp_register_routes_for_namespace($ns, $auth) {
         register_rest_route($ns, '/option',  ['methods' => 'GET',  'callback' => 'sbmcp_get_option',    'permission_callback' => $auth]);
         register_rest_route($ns, '/option',  ['methods' => 'POST', 'callback' => 'sbmcp_update_option', 'permission_callback' => $auth, 'args' => [
             // Declared so the flag is part of the documented REST contract, not
-            // just an undocumented body key. Handler coerces via sbmcp_to_bool().
-            'json' => ['type' => 'boolean', 'required' => false, 'default' => false, 'description' => 'Decode value as JSON and store the resulting array.'],
+            // just an undocumented body key. Deliberately no 'default': absent and
+            // false mean different things here (reject vs. store literally), and a
+            // default would collapse the two before the handler could tell them apart.
+            'json' => ['type' => 'boolean', 'required' => false, 'description' => 'true decodes value as JSON and stores the resulting array; false stores value as a literal string. Omit to have a JSON-looking value rejected rather than guessed at.'],
         ]]);
         register_rest_route($ns, '/options', ['methods' => 'GET',  'callback' => 'sbmcp_list_options',  'permission_callback' => $auth]);
     }
