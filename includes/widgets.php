@@ -34,7 +34,8 @@ function sbmcp_update_widget(WP_REST_Request $request) {
     global $wp_widget_factory;
     $params = $request->get_json_params();
     $widget_id = $params['widget_id'] ?? null; $settings = $params['settings'] ?? null;
-    if (!$widget_id || $settings === null) return new WP_Error('missing_fields', 'Provide widget_id and settings.', ['status' => 400]);
+    if (!$widget_id) return new WP_Error('missing_widget_id', 'Missing required parameter: widget_id', ['status' => 400]);
+    if ($settings === null) return new WP_Error('missing_settings', 'Missing required parameter: settings', ['status' => 400]);
     if (!preg_match('/^(.+)-(\d+)$/', $widget_id, $matches)) return new WP_Error('invalid_widget_id', 'Widget ID format must be "type-number".', ['status' => 400]);
 
     // Validate the widget type is registered, and find the matching widget instance.

@@ -107,7 +107,7 @@ function sbmcp_option_is_sensitive(string $key): bool {
 
 function sbmcp_get_option(WP_REST_Request $request) {
     $key = $request->get_param('key');
-    if (!$key) return new WP_Error('missing_key', 'Provide an option key.', ['status' => 400]);
+    if (!$key) return new WP_Error('missing_key', 'Missing required parameter: key', ['status' => 400]);
     if (!sbmcp_option_is_allowed($key)) return new WP_Error('forbidden', 'This option cannot be accessed via the API.', ['status' => 403]);
     if (sbmcp_option_is_sensitive($key)) return new WP_Error('forbidden', 'This option key matches a sensitive pattern (key/secret/token/password) and cannot be read via the API.', ['status' => 403]);
     $value = get_option($key);
@@ -194,7 +194,8 @@ function sbmcp_update_option(WP_REST_Request $request) {
     $params = $request->get_json_params();
     $key    = $params['key']   ?? null;
     $value  = $params['value'] ?? null;
-    if (!$key || $value === null) return new WP_Error('missing_fields', 'Provide key and value.', ['status' => 400]);
+    if (!$key) return new WP_Error('missing_key', 'Missing required parameter: key', ['status' => 400]);
+    if ($value === null) return new WP_Error('missing_value', 'Missing required parameter: value', ['status' => 400]);
     if (!sbmcp_option_is_allowed($key)) return new WP_Error('forbidden', 'This option cannot be modified via the API.', ['status' => 403]);
     // Mirror the read path: a key matching a sensitive pattern (token/secret/key/
     // password/roles/caps) cannot be read, so it must not be writable either.

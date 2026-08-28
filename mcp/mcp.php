@@ -257,7 +257,7 @@ function sbmcp_mcp_tools_call($id, $params) {
 
         case 'get_post_details':
             $pid = (int) ($input['id'] ?? 0);
-            if (!$pid) return sbmcp_mcp_tool_error($id, 'id is required');
+            if (!$pid) return sbmcp_mcp_tool_error($id, 'Missing required parameter: id');
             $p = get_post($pid);
             if (!$p) return sbmcp_mcp_tool_error($id, "Post {$pid} not found");
             // Same cross-group guard the other posts tools apply: attachments and

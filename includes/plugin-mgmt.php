@@ -33,7 +33,7 @@ function sbmcp_self_basename(): string {
 function sbmcp_activate_plugin(WP_REST_Request $request) {
     require_once ABSPATH . 'wp-admin/includes/plugin.php';
     $plugin = $request->get_json_params()['plugin'] ?? null;
-    if (!$plugin) return new WP_Error('missing_plugin', 'Provide a plugin file.', ['status' => 400]);
+    if (!$plugin) return new WP_Error('missing_plugin', 'Missing required parameter: plugin', ['status' => 400]);
     if (validate_file($plugin) !== 0) return new WP_Error('invalid_plugin', 'Invalid plugin path.', ['status' => 400]);
     if (strcasecmp($plugin, sbmcp_self_basename()) === 0) return new WP_Error('forbidden_self', 'StrifeBridge MCP cannot operate on itself.', ['status' => 403]);
     if (!file_exists(WP_PLUGIN_DIR . '/' . $plugin)) return new WP_Error('not_found', 'Plugin not found.', ['status' => 404]);
@@ -45,7 +45,7 @@ function sbmcp_activate_plugin(WP_REST_Request $request) {
 function sbmcp_deactivate_plugin(WP_REST_Request $request) {
     require_once ABSPATH . 'wp-admin/includes/plugin.php';
     $plugin = $request->get_json_params()['plugin'] ?? null;
-    if (!$plugin) return new WP_Error('missing_plugin', 'Provide a plugin file.', ['status' => 400]);
+    if (!$plugin) return new WP_Error('missing_plugin', 'Missing required parameter: plugin', ['status' => 400]);
     if (validate_file($plugin) !== 0) return new WP_Error('invalid_plugin', 'Invalid plugin path.', ['status' => 400]);
     if (strcasecmp($plugin, sbmcp_self_basename()) === 0) return new WP_Error('forbidden_self', 'StrifeBridge MCP cannot operate on itself.', ['status' => 403]);
     deactivate_plugins($plugin);
@@ -56,7 +56,7 @@ function sbmcp_delete_plugin(WP_REST_Request $request) {
     require_once ABSPATH . 'wp-admin/includes/plugin.php';
     require_once ABSPATH . 'wp-admin/includes/file.php';
     $slug = $request['slug'];
-    if (!$slug) return new WP_Error('missing_slug', 'Provide a plugin slug.', ['status' => 400]);
+    if (!$slug) return new WP_Error('missing_slug', 'Missing required parameter: slug', ['status' => 400]);
     $all = get_plugins(); $plugin_file = null;
     foreach ($all as $file => $data) {
         $file_slug = dirname($file) === '.' ? basename($file, '.php') : dirname($file);

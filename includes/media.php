@@ -110,7 +110,7 @@ function sbmcp_upload_media(WP_REST_Request $request) {
         return ['status' => 'uploaded', 'id' => $id, 'url' => wp_get_attachment_url($id)];
     }
 
-    return new WP_Error('missing_fields', 'Provide url, or base64 + filename.', ['status' => 400]);
+    return new WP_Error('missing_fields', 'Missing required parameter: url, or base64 and filename.', ['status' => 400]);
 }
 
 /**

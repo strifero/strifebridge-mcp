@@ -21,7 +21,7 @@ function sbmcp_list_terms(WP_REST_Request $request) {
 function sbmcp_create_term(WP_REST_Request $request) {
     $params = $request->get_json_params();
     $name = $params['name'] ?? null; $taxonomy = $params['taxonomy'] ?? 'category';
-    if (!$name) return new WP_Error('missing_name', 'Provide a term name.', ['status' => 400]);
+    if (!$name) return new WP_Error('missing_name', 'Missing required parameter: name', ['status' => 400]);
     if (!taxonomy_exists($taxonomy)) return new WP_Error('invalid_taxonomy', 'Taxonomy does not exist.', ['status' => 400]);
     $result = wp_insert_term($name, $taxonomy, ['parent' => $params['parent'] ?? 0, 'description' => $params['description'] ?? '']);
     if (is_wp_error($result)) return new WP_Error('create_error', $result->get_error_message(), ['status' => 400]);
