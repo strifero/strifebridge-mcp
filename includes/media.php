@@ -35,6 +35,13 @@ function sbmcp_upload_media(WP_REST_Request $request) {
     $name   = $params['filename'] ?? null;
     $title  = $params['title']    ?? null;
 
+    // Validated once for both paths: filename reaches pathinfo() on the base64
+    // path and a string-typed helper on the url path, and a non-string (a JSON
+    // array, say) is a TypeError in either.
+    if ($name !== null && !is_string($name)) {
+        return new WP_Error('invalid_filename', 'filename must be a string.', ['status' => 400]);
+    }
+
     if ($url) {
         $scheme = strtolower(wp_parse_url($url, PHP_URL_SCHEME) ?? '');
         if (!in_array($scheme, ['http', 'https'], true)) {
