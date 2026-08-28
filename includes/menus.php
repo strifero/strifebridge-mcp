@@ -19,7 +19,14 @@ function sbmcp_get_menu_items(WP_REST_Request $request) {
 
 function sbmcp_create_menu_item(WP_REST_Request $request) {
     $params = $request->get_json_params();
-    $id = wp_update_nav_menu_item((int) $request['id'], 0, ['menu-item-title' => $params['title'] ?? '', 'menu-item-url' => $params['url'] ?? '', 'menu-item-status' => 'publish', 'menu-item-parent-id' => $params['parent'] ?? 0, 'menu-item-position' => $params['order'] ?? 0, 'menu-item-type' => $params['type'] ?? 'custom']);
+    // menu_id is the name the tool schema publishes, so it is what a caller can
+    // discover and is read first. Over REST the same value arrives as the id
+    // capture in the /menu/<id>/items path, which is the route's own segment
+    // name rather than something the caller chooses; accept it as the fallback
+    // so the REST URL keeps working unchanged.
+    $menu_id = (int) ($request['menu_id'] ?? $request['id'] ?? 0);
+    if ($menu_id <= 0) return new WP_Error('missing_menu_id', 'Missing required parameter: menu_id', ['status' => 400]);
+    $id = wp_update_nav_menu_item($menu_id, 0, ['menu-item-title' => $params['title'] ?? '', 'menu-item-url' => $params['url'] ?? '', 'menu-item-status' => 'publish', 'menu-item-parent-id' => $params['parent'] ?? 0, 'menu-item-position' => $params['order'] ?? 0, 'menu-item-type' => $params['type'] ?? 'custom']);
     if (is_wp_error($id)) return new WP_Error('create_error', $id->get_error_message(), ['status' => 400]);
     return ['status' => 'created', 'id' => $id];
 }
