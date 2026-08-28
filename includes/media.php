@@ -12,7 +12,7 @@ function sbmcp_list_media(WP_REST_Request $request) {
     // per_page=-1 would return the entire media library in one response.
     $per_page = min(max((int) ($request->get_param('per_page') ?? 50), 1), 200);
     $items = get_posts(['post_type' => 'attachment', 'post_status' => 'inherit', 'posts_per_page' => $per_page]);
-    return array_map(fn($item) => ['id' => $item->ID, 'title' => $item->post_title, 'filename' => basename(get_attached_file($item->ID)), 'url' => wp_get_attachment_url($item->ID), 'type' => $item->post_mime_type, 'date' => $item->post_date], $items);
+    return array_map(fn($item) => ['id' => $item->ID, 'title' => $item->post_title, 'filename' => basename((string) get_attached_file($item->ID)), 'url' => wp_get_attachment_url($item->ID), 'type' => $item->post_mime_type, 'date' => $item->post_date], $items);
 }
 
 function sbmcp_get_media(WP_REST_Request $request) {
@@ -21,7 +21,7 @@ function sbmcp_get_media(WP_REST_Request $request) {
     if (!$post || $post->post_type !== 'attachment') {
         return new WP_Error('not_found', 'Media item not found.', ['status' => 404]);
     }
-    return ['id' => $post->ID, 'title' => $post->post_title, 'filename' => basename(get_attached_file($id)), 'url' => wp_get_attachment_url($id), 'type' => $post->post_mime_type, 'alt' => get_post_meta($id, '_wp_attachment_image_alt', true), 'date' => $post->post_date, 'meta' => wp_get_attachment_metadata($id)];
+    return ['id' => $post->ID, 'title' => $post->post_title, 'filename' => basename((string) get_attached_file($id)), 'url' => wp_get_attachment_url($id), 'type' => $post->post_mime_type, 'alt' => get_post_meta($id, '_wp_attachment_image_alt', true), 'date' => $post->post_date, 'meta' => wp_get_attachment_metadata($id)];
 }
 
 function sbmcp_upload_media(WP_REST_Request $request) {
@@ -89,7 +89,14 @@ function sbmcp_upload_media(WP_REST_Request $request) {
             return new WP_Error('type_mismatch', 'File content does not match its extension. Rename the file to match its actual type.', ['status' => 400]);
         }
         $filetype = ['ext' => $checked['ext'], 'type' => $checked['type']];
-        $id = wp_insert_attachment(['post_mime_type' => $filetype['type'], 'post_title' => $title ?? sanitize_file_name($name), 'post_content' => '', 'post_status' => 'inherit'], $upload['file']);
+        // $wp_error=true: without it a failed insert returns 0, which this
+        // handler reported as a successful upload with id 0, leaving the written
+        // file orphaned in uploads with no attachment row pointing at it.
+        $id = wp_insert_attachment(['post_mime_type' => $filetype['type'], 'post_title' => $title ?? sanitize_file_name($name), 'post_content' => '', 'post_status' => 'inherit'], $upload['file'], 0, true);
+        if (is_wp_error($id) || !$id) {
+            @unlink($upload['file']);
+            return new WP_Error('upload_error', is_wp_error($id) ? $id->get_error_message() : 'Could not create the attachment record.', ['status' => 500]);
+        }
         wp_update_attachment_metadata($id, wp_generate_attachment_metadata($id, $upload['file']));
         return ['status' => 'uploaded', 'id' => $id, 'url' => wp_get_attachment_url($id)];
     }

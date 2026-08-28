@@ -92,6 +92,10 @@ function sbmcp_create_post(WP_REST_Request $request) {
 
 function sbmcp_update_post(WP_REST_Request $request) {
     $id = (int) $request['id']; $params = $request->get_json_params();
+    // get_json_params() returns null on an absent or unparseable body. The
+    // ?? reads below tolerate that, but array_key_exists() does not: on PHP 8
+    // it throws a TypeError, so POST /post/123 with no body was a fatal.
+    if (!is_array($params)) $params = [];
     $post = get_post($id);
     if (!$post) return new WP_Error('not_found', 'Post not found', ['status' => 404]);
     $error = sbmcp_posts_delegated_type_error($post->post_type);
@@ -103,7 +107,7 @@ function sbmcp_update_post(WP_REST_Request $request) {
     $result = wp_update_post($update, true);
     if (is_wp_error($result)) return new WP_Error('update_failed', $result->get_error_message(), ['status' => 500]);
     if (array_key_exists('featured_media', $params) || array_key_exists('thumbnail_id', $params)) {
-        $thumb_id = (int) ($params['featured_media'] ?? $params['thumbnail_id']);
+        $thumb_id = (int) ($params['featured_media'] ?? $params['thumbnail_id'] ?? 0);
         if ($thumb_id > 0) {
             set_post_thumbnail($id, $thumb_id);
         } else {
