@@ -117,7 +117,7 @@ function sbmcp_update_post(WP_REST_Request $request) {
 }
 
 function sbmcp_delete_post(WP_REST_Request $request) {
-    $id = (int) $request['id']; $force = (bool) ($request->get_param('force') ?? false);
+    $id = (int) $request['id']; $force = sbmcp_param_bool($request, 'force');
     $post = get_post($id);
     if (!$post) return new WP_Error('not_found', 'Post not found', ['status' => 404]);
     $error = sbmcp_posts_delegated_type_error($post->post_type);

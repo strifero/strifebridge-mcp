@@ -20,6 +20,7 @@ define('SBMCP_VERSION', '2.3.2');
 define('SBMCP_PATH', plugin_dir_path(__FILE__));
 define('SBMCP_URL',  plugin_dir_url(__FILE__));
 
+require_once SBMCP_PATH . 'includes/helpers.php';
 require_once SBMCP_PATH . 'includes/auth.php';
 require_once SBMCP_PATH . 'includes/tool-toggles.php';
 require_once SBMCP_PATH . 'includes/media.php';
