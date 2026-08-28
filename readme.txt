@@ -83,7 +83,7 @@ No. Claude.ai free users can add one custom connector, and StrifeBridge MCP work
 
 = Does this work with ChatGPT or Gemini? =
 
-No. ChatGPT and Gemini use different protocols and do not currently support MCP.
+StrifeBridge MCP is built and tested against Claude. Other AI tools have been adding MCP support, and any client that can connect to a remote MCP server over Streamable HTTP may work, but clients other than Claude are not officially supported or tested.
 
 = Does this work on WordPress.com? =
 
