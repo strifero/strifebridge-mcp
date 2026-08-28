@@ -268,13 +268,21 @@ function sbmcp_mcp_tools_call($id, $params) {
         return sbmcp_mcp_tool_error($id, $denied->get_error_message());
     }
 
+    // Cleared so the code read back below belongs to this call and not to an
+    // earlier one in the same request.
+    sbmcp_mcp_last_error_code(null);
+
     $response = sbmcp_mcp_dispatch_tool($id, $params);
 
     $data = ($response instanceof WP_REST_Response) ? $response->get_data() : null;
     if (is_array($data) && isset($data['error'])) {
+        // A protocol-level error (bad method, unknown tool): never a guard.
         sbmcp_audit_log($name, $input, 'error', $data['error']['message'] ?? 'Unknown error');
     } elseif (is_array($data) && !empty($data['result']['isError'])) {
-        sbmcp_audit_log($name, $input, 'error', $data['result']['content'][0]['text'] ?? 'Tool returned an error');
+        // A tool error. Classify by the code the handler returned, so a guard
+        // refusing the call is recorded as 'denied' rather than as a failure.
+        $result = sbmcp_audit_result_for_code(sbmcp_mcp_last_error_code());
+        sbmcp_audit_log($name, $input, $result, $data['result']['content'][0]['text'] ?? 'Tool returned an error');
     } else {
         sbmcp_audit_log($name, $input, 'success');
     }
@@ -325,14 +333,14 @@ function sbmcp_mcp_dispatch_tool($id, $params) {
 
         case 'get_post_details':
             $pid = (int) ($input['id'] ?? 0);
-            if (!$pid) return sbmcp_mcp_tool_error($id, 'Missing required parameter: id');
+            if (!$pid) return sbmcp_mcp_tool_error($id, 'Missing required parameter: id', 'missing_id');
             $p = get_post($pid);
             if (!$p) return sbmcp_mcp_tool_error($id, "Post {$pid} not found");
             // Same cross-group guard the other posts tools apply: attachments and
             // nav menu items belong to the media and menus groups, which carry
             // their own toggle.
             $delegated = sbmcp_posts_delegated_type_error($p->post_type);
-            if ($delegated) return sbmcp_mcp_tool_error($id, $delegated->get_error_message());
+            if ($delegated) return sbmcp_mcp_tool_error($id, $delegated->get_error_message(), $delegated->get_error_code());
 
             $include = $input['include'] ?? ['meta', 'terms', 'thumbnail', 'author'];
             $exclude = $input['exclude'] ?? [];
@@ -443,7 +451,7 @@ function sbmcp_mcp_dispatch_tool($id, $params) {
 }
 
 function sbmcp_mcp_cb($id, $result) {
-    if (is_wp_error($result)) return sbmcp_mcp_tool_error($id, $result->get_error_message());
+    if (is_wp_error($result)) return sbmcp_mcp_tool_error($id, $result->get_error_message(), $result->get_error_code());
     return sbmcp_mcp_tool_result($id, wp_json_encode($result));
 }
 function sbmcp_mcp_response($id, $result) {
@@ -452,8 +460,28 @@ function sbmcp_mcp_response($id, $result) {
 function sbmcp_mcp_tool_result($id, string $text) {
     return sbmcp_mcp_response($id, ['content' => [['type' => 'text', 'text' => $text]], 'isError' => false]);
 }
-function sbmcp_mcp_tool_error($id, string $message) {
+function sbmcp_mcp_tool_error($id, string $message, ?string $code = null) {
+    // The MCP wire format carries only the message, but the audit log needs the
+    // code to tell a guard refusing a call from the plugin actually breaking.
+    // Stashed here so sbmcp_mcp_tools_call() can read it after dispatch.
+    sbmcp_mcp_last_error_code($code);
     return sbmcp_mcp_response($id, ['content' => [['type' => 'text', 'text' => $message]], 'isError' => true]);
+}
+
+/**
+ * Holds the error code from the most recent tool error within this request.
+ *
+ * Call with an argument to set (including null to clear), with none to read.
+ *
+ * @param string|null $set Code to record.
+ * @return string|null
+ */
+function sbmcp_mcp_last_error_code(?string $set = null): ?string {
+    static $code = null;
+    if (func_num_args() > 0) {
+        $code = $set;
+    }
+    return $code;
 }
 function sbmcp_mcp_error($code, $message, $id) {
     return new WP_REST_Response(['jsonrpc' => '2.0', 'id' => $id, 'error' => ['code' => $code, 'message' => $message]]);

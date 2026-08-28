@@ -329,6 +329,71 @@ function sbmcp_audit_log(string $tool, array $args = [], string $result = 'succe
 }
 
 /**
+ * Error codes that mean the plugin REFUSED a call, rather than attempted it and
+ * failed. These are recorded as 'denied'; everything else is recorded as 'error'.
+ *
+ * The distinction is what makes the log readable. "denied" answers "what did my
+ * guards stop?" — safe mode, the security guards on options and uploads, and the
+ * input contracts that reject a malformed call before any work happens. "error"
+ * answers "what broke?" — a wp_insert_post() that failed, an upload that could
+ * not be written. Collapsing the two would bury a read-only-mode refusal in the
+ * same bucket as a database failure.
+ *
+ * Anything not listed here falls through to 'error'. That is the safe default:
+ * an unclassified guard shows up as a noisier error, never as a silent success.
+ *
+ * @return string[]
+ */
+function sbmcp_audit_denial_codes(): array {
+    return apply_filters('sbmcp_audit_denial_codes', [
+        // Safe Mode and tool-group policy.
+        'read_only_mode', 'safe_mode_publish_blocked', 'wrong_tool_group',
+        // Security guards.
+        'forbidden', 'forbidden_sensitive_option', 'forbidden_self',
+        // Upload and payload guards.
+        'disallowed_type', 'type_mismatch', 'payload_too_large',
+        'invalid_filename', 'invalid_base64', 'invalid_url',
+        // update_option JSON contract.
+        'json_value_ambiguous', 'json_not_array', 'json_invalid', 'json_not_string',
+        // Input validation: refused before the handler does any work.
+        'missing_fields', 'missing_key', 'missing_value', 'missing_menu_id',
+        'missing_name', 'missing_plugin', 'missing_settings', 'missing_slug',
+        'missing_widget_id', 'missing_id',
+        'invalid_plugin', 'invalid_taxonomy', 'invalid_widget_id',
+        'invalid_widget_type', 'invalid_post_type', 'invalid_post_status',
+    ]);
+}
+
+/**
+ * Maps a WP_Error returned by a handler onto an audit result.
+ *
+ * Note on 'not_found': deliberately NOT a denial. A missing post or option is
+ * neither a guard refusing a call nor the plugin breaking — but the column has
+ * only three values, and filing routine 404s under 'denied' would dilute exactly
+ * the signal an administrator opens that view to find.
+ *
+ * @param WP_Error $error Error returned by a handler.
+ * @return string 'denied' or 'error'.
+ */
+function sbmcp_audit_result_for_error(WP_Error $error): string {
+    return sbmcp_audit_result_for_code($error->get_error_code());
+}
+
+/**
+ * Same classification, from a bare error code.
+ *
+ * The MCP surface needs this: sbmcp_mcp_cb() converts a WP_Error into a wire
+ * response and only the message survives, so the code is carried alongside
+ * rather than re-derived from the response.
+ *
+ * @param string|null $code Error code, or null when none was recorded.
+ * @return string 'denied' or 'error'.
+ */
+function sbmcp_audit_result_for_code(?string $code): string {
+    return ($code !== null && in_array($code, sbmcp_audit_denial_codes(), true)) ? 'denied' : 'error';
+}
+
+/**
  * Records a rejected authentication attempt, at most once per IP per minute.
  *
  * The throttle matters: the daily prune caps the table at 1000 rows, but

@@ -4,7 +4,9 @@
  *
  * Three independent toggles, stored as an array in the sbmcp_safe_mode option:
  *
- *   force_draft      create_post always produces a draft, whatever was asked for.
+ *   force_draft      create_post always produces a draft, and update_post refuses
+ *                    a status change that would publish or schedule a post that
+ *                    is not already published.
  *   trash_not_delete delete_post trashes instead of permanently deleting.
  *   read_only        every write tool is refused; only reads run.
  *
@@ -138,7 +140,10 @@ function sbmcp_guarded_callback(string $tool, callable $handler): callable {
         $result = call_user_func($handler, $request);
 
         if (is_wp_error($result)) {
-            sbmcp_audit_log($tool, $args, 'error', $result->get_error_message());
+            // Not every WP_Error is a failure. A handler that refuses a call —
+            // an options guard, an upload type check, a missing required
+            // parameter — is a denial, and is logged as one.
+            sbmcp_audit_log($tool, $args, sbmcp_audit_result_for_error($result), $result->get_error_message());
         } else {
             sbmcp_audit_log($tool, $args, 'success');
         }
