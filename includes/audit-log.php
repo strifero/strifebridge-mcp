@@ -309,19 +309,48 @@ function sbmcp_audit_log(string $tool, array $args = [], string $result = 'succe
 
         $error_msg = $error_msg !== null ? substr(sanitize_text_field($error_msg), 0, 255) : null;
 
-        $wpdb->insert(
-            sbmcp_audit_table(),
-            [
-                'ts'           => gmdate('Y-m-d H:i:s'),
-                'tool'         => substr(sanitize_key($tool), 0, 64),
-                'args_summary' => sbmcp_audit_summarize_args($tool, $args) ?: null,
-                'result'       => $result,
-                'error_msg'    => $error_msg,
-                'ip'           => sbmcp_audit_ip_logging_enabled() ? sbmcp_audit_client_ip() : null,
-                'token_hint'   => sbmcp_audit_token_hint(),
-            ],
-            ['%s', '%s', '%s', '%s', '%s', '%s', '%s']
-        );
+        $row = [
+            'ts'           => gmdate('Y-m-d H:i:s'),
+            'tool'         => substr(sanitize_key($tool), 0, 64),
+            'args_summary' => sbmcp_audit_summarize_args($tool, $args) ?: null,
+            'result'       => $result,
+            'error_msg'    => $error_msg,
+            'ip'           => sbmcp_audit_ip_logging_enabled() ? sbmcp_audit_client_ip() : null,
+            'token_hint'   => sbmcp_audit_token_hint(),
+        ];
+        $format = ['%s', '%s', '%s', '%s', '%s', '%s', '%s'];
+
+        // Errors are suppressed across both attempts: a missing table would
+        // otherwise have $wpdb echo "Table doesn't exist" straight into the
+        // middle of a REST or MCP response body on a site with error display on.
+        $was_suppressing = $wpdb->suppress_errors(true);
+
+        $written = $wpdb->insert(sbmcp_audit_table(), $row, $format);
+
+        // Self-heal on a failed write, rather than probing with SHOW TABLES on
+        // every call. The version check above catches schema drift but not a
+        // table that has gone missing while sbmcp_db_version still reads
+        // current — a partial restore, a migration that copied the options
+        // table but not the plugin's own, or someone dropping it by hand. In
+        // that combination the guard above passes, the insert fails, and
+        // logging stops permanently with no error and no signal. For an
+        // accountability feature that is the worst way to fail.
+        //
+        // sbmcp_audit_install_table() is called directly and NOT through
+        // sbmcp_audit_maybe_upgrade(), which early-returns when the stored
+        // version already matches — precisely the case being repaired here.
+        // dbDelta() creates the table when absent and is a no-op when it is
+        // already correct, so a spurious failure costs nothing.
+        if ($written === false) {
+            sbmcp_audit_install_table();
+            $written = $wpdb->insert(sbmcp_audit_table(), $row, $format);
+        }
+
+        $wpdb->suppress_errors($was_suppressing);
+
+        // Still failing after the rebuild (no DB, no CREATE permission): give up
+        // quietly. The tool call this describes has already run and must not be
+        // turned into an error by its own logging.
     } catch (Throwable $e) {
         // Swallowed on purpose: the tool call it describes has already run.
         return;
