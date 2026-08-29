@@ -16,7 +16,7 @@ StrifeBridge MCP turns your WordPress site into an MCP (Model Context Protocol) 
 
 Want to add a blog post? Ask Claude. Need to update a menu item? Ask Claude. Wondering which pages are missing SEO metadata? Ask Claude to check and fix them.
 
-StrifeBridge MCP exposes a structured, token-authenticated REST API and MCP server inside your WordPress install. AI assistants that support MCP (Claude.ai, Claude Desktop, Cursor, Windsurf, and any MCP-capable agent framework) can connect to it and perform tasks across your site through natural language.
+StrifeBridge MCP exposes a structured, authenticated REST API and MCP server inside your WordPress install. AI assistants that support MCP (ChatGPT, Claude.ai, Claude Desktop, Gemini, Cursor, Windsurf, and any MCP-capable agent framework) can connect to it and perform tasks across your site through natural language. Connections use OAuth 2.1 and act as a real WordPress account, so an assistant is held to that account's permissions.
 
 = What you can do =
 
@@ -164,6 +164,17 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 
 == Changelog ==
 
+= 3.0.0 =
+* New: **OAuth 2.1 support.** ChatGPT, Gemini, and any other assistant whose connector expects OAuth can now connect. Previously the plugin offered only a bearer token, which those connector interfaces do not accept, so they could not be used at all. Paste the server URL into the assistant, sign in to WordPress, approve the connection, and you are done — there is no token to copy by hand.
+* New: **Connections act as a real WordPress account.** An OAuth connection is bound to the user who approved it, and every tool call now runs as that account. This is the substantive security change in this release: tool calls are subject to WordPress capability checks for the first time. A connection bound to an editor can edit posts and cannot touch site options, plugins, or users, and a leaked credential is limited to what that one account can do rather than being equivalent to an administrator.
+* New: **Connected Applications** in Settings. Every approved assistant is listed with the account it acts as, what it was granted, and when it last made a request, each with a Revoke button. Revoking takes effect on the application's next request.
+* New: Authorization screen in wp-admin naming the application, the account it will act as, and the access it is asking for, with the return address it will be sent back to.
+* New: Dynamic Client Registration, which ChatGPT requires in order to connect at all, and both OAuth discovery documents at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`.
+* New: Authorizations, refusals, token issuance, and revocations are all recorded in the activity log. A call refused because the bound account lacks the capability is recorded as **denied**, alongside the existing Safe Mode and guard refusals.
+* Security: PKCE is mandatory and only the S256 method is accepted; the `plain` method is rejected outright. Authorization codes are single-use, expire in 60 seconds, and are bound to the application and its PKCE challenge. Redirect URIs are matched exactly against what the application registered, with no wildcard or prefix matching. Refresh tokens rotate on every use. Access tokens last one hour, refresh tokens thirty days. Tokens, authorization codes, and client secrets are stored only as hashes and compared in constant time. The token and registration endpoints are rate limited.
+* **Existing bearer token connections keep working, unchanged.** Nothing needs to be reconnected or reconfigured on upgrade. The bearer token is now marked as the legacy path in Settings, since it carries full administrator authority and cannot be scoped down; OAuth is recommended for new connections.
+* Developers: `sbmcp_tool_capabilities` declares the capability each tool requires, `sbmcp_oauth_scopes` extends the scope list, `sbmcp_audit_loggable_args` is now filterable so add-ons can declare their own loggable arguments, and the two discovery documents are filterable through `sbmcp_oauth_authorization_server_metadata` and `sbmcp_oauth_protected_resource_metadata`.
+
 = 2.4.0 =
 * New: Activity log. Every tool call is recorded — the tool, a short sanitized summary of what it acted on, the result, the time, and the requesting IP. Calls refused by a tool group toggle, by Safe Mode, or by a security guard are recorded as denied, and failed authentication attempts are logged too.
 * New: Recent Activity panel in Settings showing the last 10 entries. The free version keeps a rolling window of 30 days or 1000 entries, whichever comes first, pruned daily.
@@ -240,6 +251,9 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 * Extension hooks for add-on plugins
 
 == Upgrade Notice ==
+
+= 3.0.0 =
+Adds OAuth 2.1, so ChatGPT and Gemini can connect for the first time. OAuth connections are bound to a real WordPress account and are held to that account's capabilities, so a connection can now be given less than full administrator authority. Existing bearer token connections keep working exactly as they are and do not need to be reconnected — the bearer token is simply marked as the legacy path, and OAuth is recommended for anything new.
 
 = 2.4.0 =
 Adds an activity log so you can see exactly what your AI assistant has done, and Safe Mode guardrails (force draft, trash instead of delete, read-only). Safe Mode defaults to off on existing sites, so nothing about your current setup changes on upgrade. Also fixes AI-created posts having no author.

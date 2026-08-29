@@ -98,6 +98,28 @@ function sbmcp_handle_safety() {
 }
 add_action('admin_init', 'sbmcp_handle_safety');
 
+/**
+ * Revokes every live token a connected application holds for one user.
+ *
+ * Revocation is immediate: the tokens are marked revoked, and
+ * sbmcp_oauth_get_access_token() refuses a revoked row, so the next request the
+ * application makes fails. There is no cache to wait out.
+ */
+function sbmcp_handle_oauth_revoke() {
+    if (!isset($_POST['sbmcp_oauth_revoke'])) return;
+    check_admin_referer('sbmcp_oauth_revoke');
+    if (!current_user_can('manage_options')) wp_die(esc_html__('Unauthorized', 'strifebridge-mcp'));
+
+    $client_id = sanitize_text_field(wp_unslash($_POST['sbmcp_oauth_revoke']));
+    $user_id   = isset($_POST['sbmcp_oauth_revoke_user']) ? (int) $_POST['sbmcp_oauth_revoke_user'] : 0;
+
+    $revoked = sbmcp_oauth_revoke_client_tokens($client_id, $user_id);
+    sbmcp_audit_log('oauth_revoke', ['client_id' => $client_id], 'success', sprintf('Revoked %d token(s) from the admin.', $revoked));
+
+    wp_safe_redirect(admin_url('options-general.php?page=strifebridge-mcp&revoked=1')); exit;
+}
+add_action('admin_init', 'sbmcp_handle_oauth_revoke');
+
 function sbmcp_handle_dismiss_review() {
     if (!isset($_POST['sbmcp_dismiss_review'])) return;
     check_admin_referer('sbmcp_dismiss_review');
@@ -115,6 +137,7 @@ add_action('admin_init', 'sbmcp_handle_dismiss_review');
 function sbmcp_settings_page() {
     $token       = get_option('sbmcp_api_token', '');
     $mcp_url_tok = get_rest_url(null, 'strifebridge/v1/' . $token);
+    $mcp_url_oauth = get_rest_url(null, 'strifebridge/v1/mcp');
     $version     = defined('SBMCP_VERSION') ? SBMCP_VERSION : '2.0.0';
     $api_disabled        = (bool) get_option('sbmcp_api_disabled');
     $disabled_tools      = get_option('sbmcp_disabled_tools', []);
@@ -130,6 +153,9 @@ function sbmcp_settings_page() {
     $recent_activity     = sbmcp_audit_log_query(['limit' => 10]);
     $current_author      = (int) get_option('sbmcp_default_author', 0);
     $log_ip              = sbmcp_audit_ip_logging_enabled();
+    $connected_apps      = sbmcp_oauth_connected_apps();
+    $oauth_revoked       = isset($_GET['revoked']);
+    $oauth_scopes        = sbmcp_oauth_scopes();
 
     // Review nag logic
     $activated_at   = get_option('sbmcp_activated_at', 0);
@@ -197,19 +223,102 @@ function sbmcp_settings_page() {
         <?php if ($regenerated): ?><div class="notice notice-success is-dismissible"><p><strong><?php esc_html_e('Token regenerated.', 'strifebridge-mcp'); ?></strong> <?php esc_html_e('Update your connector URL in Claude.ai.', 'strifebridge-mcp'); ?></p></div><?php endif; ?>
         <?php if ($tools_saved): ?><div class="notice notice-success is-dismissible"><p><strong><?php esc_html_e('Tool settings saved.', 'strifebridge-mcp'); ?></strong></p></div><?php endif; ?>
         <?php if ($safety_saved): ?><div class="notice notice-success is-dismissible"><p><strong><?php esc_html_e('Safety settings saved.', 'strifebridge-mcp'); ?></strong></p></div><?php endif; ?>
+        <?php if ($oauth_revoked): ?><div class="notice notice-success is-dismissible"><p><strong><?php esc_html_e('Application disconnected.', 'strifebridge-mcp'); ?></strong> <?php esc_html_e('Its tokens no longer work.', 'strifebridge-mcp'); ?></p></div><?php endif; ?>
 
         <div class="sb-layout">
             <div class="sb-main">
 
-                <!-- Claude.ai Connector -->
+                <!-- Connect an AI assistant -->
                 <div class="sb-card">
-                    <h2><?php esc_html_e('Claude.ai Connector', 'strifebridge-mcp'); ?></h2>
-                    <p><?php esc_html_e('Copy the URL below and paste it into Claude.ai → Settings → Integrations → Add custom connector.', 'strifebridge-mcp'); ?></p>
+                    <h2><?php esc_html_e('Connect an AI assistant', 'strifebridge-mcp'); ?></h2>
+                    <p><?php esc_html_e('Paste this URL into the assistant&#8217;s connector settings. ChatGPT, Claude, and Gemini will bring you back here to sign in and approve the connection, after which the assistant acts as your WordPress account and can do nothing that account cannot.', 'strifebridge-mcp'); ?></p>
+                    <div class="sb-field">
+                        <label for="sb-mcp-oauth-url"><?php esc_html_e('Server URL', 'strifebridge-mcp'); ?></label>
+                        <div class="sb-input-row">
+                            <input type="text" id="sb-mcp-oauth-url" value="<?php echo esc_attr($mcp_url_oauth); ?>" class="large-text" readonly />
+                            <button type="button" class="button button-primary" data-sb-copy="sb-mcp-oauth-url" data-label="<?php echo esc_attr($copy_label); ?>" data-copied="<?php echo esc_attr($copied_label); ?>"><?php echo esc_html($copy_label); ?></button>
+                        </div>
+                        <p class="sb-tool-desc"><?php esc_html_e('Recommended for all new connections. There is no token to copy by hand, and you can disconnect any assistant below without disturbing the others.', 'strifebridge-mcp'); ?></p>
+                    </div>
+                </div>
+
+                <!-- Connected Applications -->
+                <div class="sb-card">
+                    <h2><?php esc_html_e('Connected Applications', 'strifebridge-mcp'); ?></h2>
+                    <p><?php esc_html_e('Assistants you have approved. Revoking takes effect on the application&#8217;s very next request.', 'strifebridge-mcp'); ?></p>
+
+                    <?php if (empty($connected_apps)): ?>
+                        <p class="sb-tool-desc"><?php esc_html_e('No applications are connected yet.', 'strifebridge-mcp'); ?></p>
+                    <?php else: ?>
+                        <table class="wp-list-table widefat striped sb-connected-apps">
+                            <thead>
+                                <tr>
+                                    <th><?php esc_html_e('Application', 'strifebridge-mcp'); ?></th>
+                                    <th><?php esc_html_e('Acting as', 'strifebridge-mcp'); ?></th>
+                                    <th><?php esc_html_e('Access', 'strifebridge-mcp'); ?></th>
+                                    <th><?php esc_html_e('Last used', 'strifebridge-mcp'); ?></th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                            <?php foreach ($connected_apps as $app): ?>
+                                <?php
+                                $app_user = get_userdata((int) $app['user_id']);
+                                $granted  = preg_split('/\s+/', trim((string) $app['scope'])) ?: [];
+                                $labels   = [];
+                                foreach ($granted as $granted_scope) {
+                                    if (isset($oauth_scopes[$granted_scope])) {
+                                        $labels[] = $oauth_scopes[$granted_scope]['label'];
+                                    }
+                                }
+                                ?>
+                                <tr>
+                                    <td>
+                                        <strong><?php echo esc_html($app['client_name'] ? $app['client_name'] : __('Unnamed application', 'strifebridge-mcp')); ?></strong>
+                                        <?php if (!empty($app['client_uri'])): ?>
+                                            <br /><span class="sb-tool-desc"><?php echo esc_html($app['client_uri']); ?></span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if ($app_user): ?>
+                                            <?php echo esc_html($app_user->user_login); ?>
+                                        <?php else: ?>
+                                            <span class="sb-tool-desc"><?php esc_html_e('deleted user', 'strifebridge-mcp'); ?></span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td class="sb-tool-desc"><?php echo esc_html($labels ? implode(', ', $labels) : (string) $app['scope']); ?></td>
+                                    <td class="sb-tool-desc">
+                                        <?php
+                                        echo esc_html(
+                                            !empty($app['last_used_at'])
+                                                ? get_date_from_gmt($app['last_used_at'], 'Y-m-d H:i')
+                                                : __('never', 'strifebridge-mcp')
+                                        );
+                                        ?>
+                                    </td>
+                                    <td>
+                                        <form method="post" class="sb-form-inline">
+                                            <?php wp_nonce_field('sbmcp_oauth_revoke'); ?>
+                                            <input type="hidden" name="sbmcp_oauth_revoke_user" value="<?php echo esc_attr((int) $app['user_id']); ?>" />
+                                            <button type="submit" name="sbmcp_oauth_revoke" value="<?php echo esc_attr($app['client_id']); ?>" class="button button-small"><?php esc_html_e('Revoke', 'strifebridge-mcp'); ?></button>
+                                        </form>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Legacy token -->
+                <div class="sb-card">
+                    <h2><?php esc_html_e('Legacy token', 'strifebridge-mcp'); ?> <span class="sb-badge sb-badge-legacy"><?php esc_html_e('Legacy', 'strifebridge-mcp'); ?></span></h2>
+                    <p><?php esc_html_e('The original connection method, still fully supported so existing setups keep working. It carries full administrator authority and cannot be scoped down or attributed to a person, so use the OAuth connection above for anything new.', 'strifebridge-mcp'); ?></p>
                     <div class="sb-field">
                         <label for="sb-mcp-url"><?php esc_html_e('Connector URL', 'strifebridge-mcp'); ?></label>
                         <div class="sb-input-row">
                             <input type="text" id="sb-mcp-url" value="<?php echo esc_attr($mcp_url_tok); ?>" class="large-text" readonly />
-                            <button type="button" class="button button-primary" data-sb-copy="sb-mcp-url" data-label="<?php echo esc_attr($copy_label); ?>" data-copied="<?php echo esc_attr($copied_label); ?>"><?php echo esc_html($copy_label); ?></button>
+                            <button type="button" class="button" data-sb-copy="sb-mcp-url" data-label="<?php echo esc_attr($copy_label); ?>" data-copied="<?php echo esc_attr($copied_label); ?>"><?php echo esc_html($copy_label); ?></button>
                         </div>
                     </div>
                     <hr class="sb-divider">

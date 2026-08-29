@@ -50,3 +50,19 @@
 .sb-result-denied{background:#fef3c7;color:#92400e}
 .sb-activity-upsell{margin:0}
 @media(max-width:800px){.sb-layout{grid-template-columns:1fr}.sb-tools-grid{grid-template-columns:1fr}}
+
+/* OAuth: legacy marker, connected applications, consent screen */
+.sb-badge-legacy{background:#9ca3af;margin-left:8px;vertical-align:middle}
+.sb-connected-apps{margin-top:8px}
+.sb-connected-apps td{vertical-align:middle}
+.sb-oauth-consent{max-width:640px}
+.sb-oauth-consent .sb-card h2{font-size:17px;margin-bottom:14px}
+.sb-oauth-consent .sb-card h3{font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:#6b7280;margin:20px 0 8px}
+.sb-scope-list{margin:0 0 20px;padding:0;list-style:none}
+.sb-scope-list li{padding:10px 14px;border:1px solid #e5e7eb;border-radius:4px;background:#fafafa;margin-bottom:8px}
+.sb-scope-list li strong{display:block;font-size:13px;color:#1a1a2e}
+.sb-scope-list li .sb-tool-desc{display:block;font-size:12px;color:#6b7280;margin-top:2px}
+.sb-oauth-detail{margin-bottom:16px}
+.sb-oauth-detail th{width:150px;text-align:left;font-size:12px;color:#6b7280;font-weight:600}
+.sb-oauth-detail td{font-size:12px}
+.sb-oauth-actions{display:flex;gap:10px;margin-top:8px}
