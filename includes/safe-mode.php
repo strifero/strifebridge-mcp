@@ -137,6 +137,14 @@ function sbmcp_guarded_callback(string $tool, callable $handler): callable {
             return $denied;
         }
 
+        // Capability and scope. See sbmcp_capability_guard(): this stands down
+        // for legacy bearer requests, which carry no bound user.
+        $denied = sbmcp_capability_guard($tool);
+        if ($denied) {
+            sbmcp_audit_log($tool, $args, 'denied', $denied->get_error_message());
+            return $denied;
+        }
+
         $result = call_user_func($handler, $request);
 
         if (is_wp_error($result)) {

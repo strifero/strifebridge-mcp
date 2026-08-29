@@ -111,7 +111,11 @@ add_action('plugins_loaded', 'sbmcp_audit_maybe_upgrade');
  * @return array<string, string[]>
  */
 function sbmcp_audit_loggable_args(): array {
-    return [
+    // Filterable so add-ons and the OAuth endpoints can declare which of their
+    // own arguments are safe to record. The allowlist still governs: a tool that
+    // declares nothing logs nothing, and a key that is not declared is never
+    // written even if a caller passes it.
+    return apply_filters('sbmcp_audit_loggable_args', [
         'list_posts'          => ['type', 'status', 'per_page'],
         'list_pages'          => ['per_page'],
         'get_post'            => ['id'],
@@ -147,7 +151,7 @@ function sbmcp_audit_loggable_args(): array {
         'flush_rewrite_rules' => [],
         'server_ping'         => [],
         'auth'                => [],
-    ];
+    ]);
 }
 
 /**

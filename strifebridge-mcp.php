@@ -24,6 +24,11 @@ require_once SBMCP_PATH . 'includes/helpers.php';
 require_once SBMCP_PATH . 'includes/audit-log.php';
 require_once SBMCP_PATH . 'includes/safe-mode.php';
 require_once SBMCP_PATH . 'includes/auth.php';
+require_once SBMCP_PATH . 'includes/oauth-store.php';
+require_once SBMCP_PATH . 'includes/oauth-auth.php';
+require_once SBMCP_PATH . 'includes/capabilities.php';
+require_once SBMCP_PATH . 'includes/oauth-discovery.php';
+require_once SBMCP_PATH . 'includes/oauth-endpoints.php';
 require_once SBMCP_PATH . 'includes/tool-toggles.php';
 require_once SBMCP_PATH . 'includes/media.php';
 require_once SBMCP_PATH . 'includes/options.php';
@@ -37,6 +42,7 @@ require_once SBMCP_PATH . 'api/api.php';
 require_once SBMCP_PATH . 'mcp/mcp.php';
 require_once SBMCP_PATH . 'includes/abilities.php';
 require_once SBMCP_PATH . 'admin/settings.php';
+require_once SBMCP_PATH . 'admin/oauth-consent.php';
 
 register_activation_hook(__FILE__, 'sbmcp_activate');
 function sbmcp_activate() {
@@ -54,6 +60,18 @@ function sbmcp_activate() {
     sbmcp_audit_install_table();
     sbmcp_audit_schedule_prune();
 
+    // OAuth storage, on the same terms as the audit table above.
+    sbmcp_oauth_install_tables();
+    sbmcp_oauth_schedule_prune();
+
+    // The .well-known discovery documents are served by rewrite rules, which do
+    // not exist until the rules are regenerated. Without this the two documents
+    // 404 until someone happens to re-save permalinks, and a connector that
+    // cannot read them cannot start the OAuth flow at all.
+    sbmcp_oauth_add_rewrite_rules();
+    flush_rewrite_rules(false);
+    update_option('sbmcp_rewrite_version', SBMCP_REWRITE_VERSION);
+
     // Safer default for brand-new installs only: deletions go to the trash and
     // stay recoverable. Existing installs upgrading to 2.4.0 keep their current
     // behavior, so an upgrade never silently changes what a tool does.
@@ -68,6 +86,13 @@ function sbmcp_deactivate() {
     // as uninstalling, and the history should survive a toggle. Only the cron
     // event is cleared, so it does not keep firing for an inactive plugin.
     sbmcp_audit_unschedule_prune();
+    sbmcp_oauth_unschedule_prune();
+
+    // Drops the .well-known rules from the rewrite cache, so the paths stop
+    // resolving while the plugin is off rather than 500ing into a handler that
+    // is no longer loaded.
+    flush_rewrite_rules(false);
+    delete_option('sbmcp_rewrite_version');
 }
 
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'sbmcp_action_links');

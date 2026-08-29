@@ -1,9 +1,20 @@
 <?php
 /**
- * Token-based authentication for StrifeBridge MCP.
+ * Credential check for the REST surface.
  *
- * Validates the bearer token via the X-StrifeBridge-Token header
- * or the Authorization: Bearer header.
+ * As of 3.0.0 this accepts two kinds of credential and delegates the decision to
+ * sbmcp_oauth_validate_request(), which is shared with the MCP endpoint so the
+ * two surfaces cannot drift apart on what counts as authenticated:
+ *
+ *   - the legacy site token, via X-StrifeBridge-Token or Authorization: Bearer,
+ *     behaving exactly as it did in 2.4.0;
+ *   - an OAuth 2.1 access token, which additionally binds the request to the
+ *     WordPress user it was issued to.
+ *
+ * The function name and its bool return are unchanged, because it is passed by
+ * name as a permission_callback and handed to add-ons through the
+ * sbmcp_register_rest_routes action. Pro registers its routes with whatever this
+ * resolves to, so changing the contract here would change it for Pro silently.
  */
 
 if (!defined('ABSPATH')) {
@@ -11,35 +22,5 @@ if (!defined('ABSPATH')) {
 }
 
 function sbmcp_validate_token(WP_REST_Request $request): bool {
-    if (get_option('sbmcp_api_disabled')) {
-        sbmcp_audit_log_auth_failure('Request refused: API is disabled (Emergency Lockdown).');
-        return false;
-    }
-
-    $stored = get_option('sbmcp_api_token');
-    if (!$stored) {
-        sbmcp_audit_log_auth_failure('Request refused: no API token is configured.');
-        return false;
-    }
-
-    $token = $request->get_header('X-StrifeBridge-Token');
-    if ($token) {
-        $valid = hash_equals($stored, $token);
-        if (!$valid) {
-            sbmcp_audit_log_auth_failure('Invalid token presented in X-StrifeBridge-Token header.');
-        }
-        return $valid;
-    }
-
-    $auth = $request->get_header('Authorization');
-    if ($auth && strpos($auth, 'Bearer ') === 0) {
-        $valid = hash_equals($stored, substr($auth, 7));
-        if (!$valid) {
-            sbmcp_audit_log_auth_failure('Invalid bearer token presented in Authorization header.');
-        }
-        return $valid;
-    }
-
-    sbmcp_audit_log_auth_failure('Request refused: no credentials presented.');
-    return false;
+    return sbmcp_oauth_validate_request($request, 'API');
 }

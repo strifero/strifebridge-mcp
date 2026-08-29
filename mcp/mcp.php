@@ -41,6 +41,11 @@ function sbmcp_register_mcp_route() {
  * so we validate it here rather than returning true blindly.
  */
 function sbmcp_mcp_validate_token_path(WP_REST_Request $request): bool {
+    // Legacy by construction: the token in the URL is the site token, so this
+    // route never carries an OAuth binding. Cleared explicitly rather than
+    // assumed absent.
+    sbmcp_oauth_context(false);
+
     if (get_option('sbmcp_api_disabled')) {
         sbmcp_audit_log_auth_failure('MCP request refused: API is disabled (Emergency Lockdown).');
         return false;
@@ -61,26 +66,14 @@ function sbmcp_mcp_validate_token_path(WP_REST_Request $request): bool {
     return $valid;
 }
 
+/**
+ * Credential check for the MCP endpoint.
+ *
+ * Accepts a legacy site token or an OAuth 2.1 access token. Shared with the REST
+ * surface so the two cannot diverge on what counts as authenticated.
+ */
 function sbmcp_mcp_validate(WP_REST_Request $request): bool {
-    if (get_option('sbmcp_api_disabled')) {
-        sbmcp_audit_log_auth_failure('MCP request refused: API is disabled (Emergency Lockdown).');
-        return false;
-    }
-    $stored = get_option('sbmcp_api_token');
-    if (!$stored) {
-        sbmcp_audit_log_auth_failure('MCP request refused: no API token is configured.');
-        return false;
-    }
-    $auth = $request->get_header('Authorization');
-    if ($auth && strpos($auth, 'Bearer ') === 0) {
-        $valid = hash_equals($stored, substr($auth, 7));
-        if (!$valid) {
-            sbmcp_audit_log_auth_failure('Invalid bearer token presented to the MCP endpoint.');
-        }
-        return $valid;
-    }
-    sbmcp_audit_log_auth_failure('MCP request refused: no credentials presented.');
-    return false;
+    return sbmcp_oauth_validate_request($request, 'MCP');
 }
 
 function sbmcp_mcp_handler(WP_REST_Request $request) {
@@ -263,6 +256,15 @@ function sbmcp_mcp_tools_call($id, $params) {
     }
 
     $denied = sbmcp_write_guard($name);
+    if ($denied) {
+        sbmcp_audit_log($name, $input, 'denied', $denied->get_error_message());
+        return sbmcp_mcp_tool_error($id, $denied->get_error_message());
+    }
+
+    // Capability and scope. No-op for a legacy bearer request, which has no
+    // bound user; for an OAuth request this is what holds the call to the
+    // authority of the account the token was issued to.
+    $denied = sbmcp_capability_guard($name);
     if ($denied) {
         sbmcp_audit_log($name, $input, 'denied', $denied->get_error_message());
         return sbmcp_mcp_tool_error($id, $denied->get_error_message());
