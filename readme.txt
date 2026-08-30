@@ -105,7 +105,9 @@ No. Claude.ai free users can add one custom connector, and StrifeBridge MCP work
 
 = Does this work with ChatGPT or Gemini? =
 
-StrifeBridge MCP is built and tested against Claude. Other AI tools have been adding MCP support, and any client that can connect to a remote MCP server over Streamable HTTP may work, but clients other than Claude are not officially supported or tested.
+Yes, as of version 3.0.0. Their connector interfaces require OAuth rather than a pasted token, which is why earlier versions could not be used with them at all. Paste the server URL from Settings &rarr; StrifeBridge MCP into the assistant, sign in to WordPress when it sends you back, and approve the connection.
+
+Claude (web, desktop, and Claude Code), Cursor, and Windsurf also work, and can use either OAuth or the legacy token. Any client that can connect to a remote MCP server over Streamable HTTP should work; those named here are the ones actually tested.
 
 = Does this work on WordPress.com? =
 
@@ -154,6 +156,35 @@ By default the oldest administrator account. You can pick a different user under
 = Can I disable individual tool groups? =
 
 Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, media, options, menus, users, plugins, widgets, taxonomies, system). Turn off anything you do not want the AI to access.
+
+= The assistant cannot connect, and /.well-known/oauth-authorization-server returns 404 (nginx) =
+
+Almost always nginx answering the request before WordPress ever sees it. Many nginx configurations — including the defaults shipped by several control panels and most Certbot/Let's Encrypt setups — contain a catch-all block for ACME certificate validation:
+
+    location ^~ /.well-known/ {
+        allow all;
+    }
+
+The `^~` prefix tells nginx to stop looking for a better match, so *every* request under `/.well-known/` is served straight from the filesystem. OAuth discovery lives at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`, and those files do not exist on disk — the plugin generates them — so nginx returns 404 and the connector gives up before it reaches PHP.
+
+The fix is to narrow the ACME block to the path it actually needs and let everything else under `/.well-known/` reach WordPress:
+
+    location ^~ /.well-known/acme-challenge/ {
+        allow all;
+        default_type "text/plain";
+    }
+
+    location /.well-known/ {
+        try_files $uri $uri/ /index.php?$args;
+    }
+
+Reload nginx, then confirm both URLs return JSON rather than 404. Certificate renewal is unaffected: ACME only ever uses `/.well-known/acme-challenge/`.
+
+If the URLs still 404 after that, re-save Settings &rarr; Permalinks once to regenerate WordPress's rewrite rules. This affects nginx only; Apache installs serve the documents through the plugin's rewrite rules without any change.
+
+= Does OAuth work if WordPress is installed in a subdirectory? =
+
+Yes, but the discovery documents live under that subdirectory — `example.com/blog/.well-known/oauth-authorization-server` — and the OAuth issuer is `example.com/blog` to match, which is self-consistent and works with any connector that follows the documents. A client that assumes the domain root will not find them; that needs a redirect in your webserver from the root `/.well-known/` paths to the subdirectory.
 
 == Screenshots ==
 

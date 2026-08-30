@@ -588,8 +588,53 @@ function sbmcp_oauth_touch_token(array $token_row) {
 }
 
 /**
+ * The last database error from this file, for the admin to surface.
+ *
+ * Exists because the previous version of sbmcp_oauth_connected_apps() ended in
+ * `is_array($rows) ? $rows : []`, which turns a failed query into "no
+ * connections" — visually identical to a site that genuinely has none. For a
+ * panel whose entire job is to show what has access to the site, silently
+ * rendering "nothing" on failure is the worst available outcome: an
+ * administrator reads it as "no application is connected" when the truth is
+ * "this panel does not know".
+ *
+ * @param string|null $set Internal. Pass a string to record, null to read.
+ * @return string Empty when the last read succeeded.
+ */
+function sbmcp_oauth_last_store_error(?string $set = null): string {
+    static $error = '';
+
+    if ($set !== null) {
+        $error = $set;
+    }
+
+    return $error;
+}
+
+/**
  * Rows for the Connected Applications list: one per client/user pair that holds
  * at least one live token.
+ *
+ * Deliberately does no aggregation in SQL. The previous version grouped in the
+ * query and returned nothing on a live database, and two things about that
+ * shape were wrong independently of whichever one caused the empty panel:
+ *
+ *   - `MAX(t.scope)` is a lexicographic maximum over a string, not the scope
+ *     that was actually granted. With a live 'mcp:admin' token and a live
+ *     'mcp:read' token for the same client, MAX() returns 'mcp:read' because
+ *     'a' < 'r'. The Access column could therefore understate or overstate what
+ *     an application may do, which is precisely the fact the column exists to
+ *     report. "The most recent token's scope" is what is wanted and it is not
+ *     expressible as an aggregate.
+ *
+ *   - The GROUP BY carried four columns across two tables, two of them from the
+ *     LEFT-JOINed side, and grouped queries are the ones exposed to server
+ *     sql_mode differences (ONLY_FULL_GROUP_BY and friends) that vary between
+ *     MySQL and MariaDB versions and between hosts. A plain SELECT behaves the
+ *     same everywhere.
+ *
+ * Folding the rows in PHP costs one pass over a list bounded by the number of
+ * live tokens, and removes both problems.
  *
  * @return array<int, array<string, mixed>>
  */
@@ -598,23 +643,67 @@ function sbmcp_oauth_connected_apps(): array {
     $tokens  = sbmcp_oauth_tokens_table();
     $clients = sbmcp_oauth_clients_table();
 
+    sbmcp_oauth_last_store_error('');
+
+    // Newest first, so the first row seen for a client/user pair is the one
+    // whose scope is current.
     $rows = $wpdb->get_results(
         $wpdb->prepare(
-            "SELECT t.client_id, t.user_id, c.client_name, c.client_uri,
-                    MAX(t.last_used_at) AS last_used_at,
-                    MIN(t.created_at) AS connected_at,
-                    MAX(t.scope) AS scope
+            "SELECT t.client_id, t.user_id, t.scope, t.created_at, t.last_used_at,
+                    c.client_name, c.client_uri
              FROM {$tokens} t
              LEFT JOIN {$clients} c ON c.client_id = t.client_id
              WHERE t.revoked_at IS NULL AND t.refresh_expires_at > %s
-             GROUP BY t.client_id, t.user_id, c.client_name, c.client_uri
-             ORDER BY MAX(t.created_at) DESC",
+             ORDER BY t.created_at DESC",
             sbmcp_oauth_now()
         ),
         ARRAY_A
     );
 
-    return is_array($rows) ? $rows : [];
+    if (!empty($wpdb->last_error)) {
+        sbmcp_oauth_last_store_error($wpdb->last_error);
+        return [];
+    }
+
+    if (!is_array($rows)) {
+        return [];
+    }
+
+    $apps = [];
+
+    foreach ($rows as $row) {
+        $key = $row['client_id'] . '|' . $row['user_id'];
+
+        if (!isset($apps[$key])) {
+            $apps[$key] = [
+                'client_id'    => $row['client_id'],
+                'user_id'      => (int) $row['user_id'],
+                'client_name'  => $row['client_name'],
+                'client_uri'   => $row['client_uri'],
+                // First row wins: the ordering above makes it the newest token,
+                // so this is the grant currently in force.
+                'scope'        => $row['scope'],
+                'connected_at' => $row['created_at'],
+                'last_used_at' => $row['last_used_at'],
+            ];
+            continue;
+        }
+
+        // Oldest live token is when the application first connected.
+        if ($row['created_at'] < $apps[$key]['connected_at']) {
+            $apps[$key]['connected_at'] = $row['created_at'];
+        }
+
+        // Most recent use across every live token for this pair. String
+        // comparison is correct here: these are UTC 'Y-m-d H:i:s', which sorts
+        // lexicographically in the same order it sorts chronologically.
+        if (!empty($row['last_used_at'])
+            && (empty($apps[$key]['last_used_at']) || $row['last_used_at'] > $apps[$key]['last_used_at'])) {
+            $apps[$key]['last_used_at'] = $row['last_used_at'];
+        }
+    }
+
+    return array_values($apps);
 }
 
 // ---------------------------------------------------------------------------

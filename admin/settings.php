@@ -154,6 +154,9 @@ function sbmcp_settings_page() {
     $current_author      = (int) get_option('sbmcp_default_author', 0);
     $log_ip              = sbmcp_audit_ip_logging_enabled();
     $connected_apps      = sbmcp_oauth_connected_apps();
+    // Read immediately after the call: distinguishes "nothing is connected"
+    // from "the list could not be read", which look identical otherwise.
+    $connected_error     = sbmcp_oauth_last_store_error();
     $oauth_revoked       = isset($_GET['revoked']);
     $oauth_scopes        = sbmcp_oauth_scopes();
 
@@ -247,7 +250,15 @@ function sbmcp_settings_page() {
                     <h2><?php esc_html_e('Connected Applications', 'strifebridge-mcp'); ?></h2>
                     <p><?php esc_html_e('Assistants you have approved. Revoking takes effect on the application&#8217;s very next request.', 'strifebridge-mcp'); ?></p>
 
-                    <?php if (empty($connected_apps)): ?>
+                    <?php if ($connected_error): ?>
+                        <div class="notice notice-error inline">
+                            <p>
+                                <strong><?php esc_html_e('This list could not be read.', 'strifebridge-mcp'); ?></strong>
+                                <?php esc_html_e('Applications may still be connected — do not read this as nothing having access. If you need to cut off access right now, use Emergency Lockdown in the Danger Zone below.', 'strifebridge-mcp'); ?>
+                            </p>
+                            <p><code><?php echo esc_html($connected_error); ?></code></p>
+                        </div>
+                    <?php elseif (empty($connected_apps)): ?>
                         <p class="sb-tool-desc"><?php esc_html_e('No applications are connected yet.', 'strifebridge-mcp'); ?></p>
                     <?php else: ?>
                         <table class="wp-list-table widefat striped sb-connected-apps">
