@@ -79,15 +79,20 @@ function sbmcp_tool_registry(): array {
         'upload_media'        => ['group' => $media, 'read' => false, 'capability' => 'upload_files',  'log_args' => ['filename', 'title', 'url']],
         'delete_media'        => ['group' => $media, 'read' => false, 'capability' => 'delete_posts',  'log_args' => ['id']],
 
-        // Options. Reading configuration is an admin act, so the whole group
-        // is admin scope (see sbmcp_admin_tool_groups()).
+        // Options. Reading configuration is an admin act — values include
+        // secrets — so the whole group is admin scope, reads included.
+        // (see sbmcp_admin_tool_groups()).
         'get_option'          => ['group' => $opts,  'read' => true,  'capability' => 'manage_options', 'log_args' => ['key']],
         'update_option'       => ['group' => $opts,  'read' => false, 'capability' => 'manage_options', 'log_args' => ['key']],
         'list_options'        => ['group' => $opts,  'read' => true,  'capability' => 'manage_options', 'log_args' => ['keys', 'pattern', 'max_value_bytes']],
 
+        // Deliberately admin scope despite being a read: emails and roles are
+        // reconnaissance, per an earlier audit.
         'list_users'          => ['group' => $users, 'read' => true,  'capability' => 'list_users',     'log_args' => ['per_page']],
 
-        'list_plugins'        => ['group' => $plug,  'read' => true,  'capability' => 'activate_plugins', 'log_args' => []],
+        // Explicit mcp:read: pure reads with no sensitive output, so a read-only
+        // grant may use them even though their groups are otherwise admin scope.
+        'list_plugins'        => ['group' => $plug,  'read' => true,  'capability' => 'activate_plugins', 'log_args' => [], 'scope' => 'mcp:read'],
         'activate_plugin'     => ['group' => $plug,  'read' => false, 'capability' => 'activate_plugins', 'log_args' => ['plugin']],
         'deactivate_plugin'   => ['group' => $plug,  'read' => false, 'capability' => 'activate_plugins', 'log_args' => ['plugin']],
         'delete_plugin'       => ['group' => $plug,  'read' => false, 'capability' => 'delete_plugins',   'log_args' => ['slug'], 'irreversible' => true],
@@ -107,9 +112,11 @@ function sbmcp_tool_registry(): array {
         'get_widgets'         => ['group' => $widg,  'read' => true,  'capability' => 'edit_theme_options', 'log_args' => ['id']],
         'update_widget'       => ['group' => $widg,  'read' => false, 'capability' => 'edit_theme_options', 'log_args' => ['widget_id']],
 
-        'get_site_info'       => ['group' => $sys,   'read' => true,  'capability' => 'manage_options', 'log_args' => []],
+        'get_site_info'       => ['group' => $sys,   'read' => true,  'capability' => 'manage_options', 'log_args' => [], 'scope' => 'mcp:read'],
         'flush_rewrite_rules' => ['group' => $sys,   'read' => false, 'capability' => 'manage_options', 'log_args' => []],
-        'server_ping'         => ['group' => $sys,   'read' => true,  'capability' => 'read',           'log_args' => []],
+        // server_ping is how every MCP client confirms the connection is alive;
+        // a read-only grant that cannot ping cannot tell it is connected at all.
+        'server_ping'         => ['group' => $sys,   'read' => true,  'capability' => 'read',           'log_args' => [], 'scope' => 'mcp:read'],
     ];
 
     /**
