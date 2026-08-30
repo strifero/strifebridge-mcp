@@ -15,6 +15,33 @@
  * an editor can be held to an editor's authority. A leaked token becomes "as
  * that user" instead of "as root", which is the whole point of the exercise.
  *
+ * THIS GATE IS INERT IN 3.0.0. DO NOT DELETE IT.
+ *
+ * 3.0.0 ships with the consent screen requiring manage_options, so only an
+ * administrator can approve a connection, so every bound user is an
+ * administrator, so every capability check below currently passes. Read in
+ * isolation the capability map looks like code that never refuses anything, and
+ * the obvious conclusion — that it is dead and can go — is wrong on three
+ * counts:
+ *
+ *   1. Non-admin authorization is 3.1. Relaxing the capability on the consent
+ *      screen is a one-line change, and on the day it lands this gate is the
+ *      only thing standing between an editor's token and the options table.
+ *      Removing it now means shipping that change with no enforcement at all.
+ *
+ *   2. Scope enforcement below is NOT inert today. A connection granted only
+ *      mcp:read is refused a write tool right now, administrator or not, and
+ *      that refusal comes from this function.
+ *
+ *   3. wp_set_current_user() has already made every capability check inside
+ *      WordPress itself live for OAuth requests. This gate refuses the call
+ *      early and records it as 'denied' with a message naming the capability;
+ *      without it the same call still fails, but deeper in, as an unexplained
+ *      error. The gate is what makes the refusal legible.
+ *
+ * Verify against the consent screen's capability in admin/oauth-consent.php
+ * before concluding anything here is unreachable.
+ *
  * WHY THE LEGACY PATH IS NOT GATED
  *
  * The gate applies only to requests bound to a user. A legacy bearer request has
@@ -233,6 +260,13 @@ function sbmcp_oauth_sanitize_scope(string $requested): string {
  * broke?", and a capability refusal is squarely the former.
  *
  * Returns null when there is no OAuth context — see the file header.
+ *
+ * NOTE: the capability branch below cannot fail in 3.0.0, because the consent
+ * screen requires manage_options and an administrator passes every capability
+ * in the map. It is deliberate and it is load-bearing from 3.1, when non-admin
+ * accounts can approve a connection. The scope branch above it is live today.
+ * See the "THIS GATE IS INERT IN 3.0.0" note in the file header before removing
+ * anything here as unreachable.
  *
  * @param string $tool
  * @return WP_Error|null

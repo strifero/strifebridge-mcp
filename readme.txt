@@ -41,25 +41,31 @@ Safe Mode adds guardrails on top of the per-tool-group toggles:
 = How it works =
 
 1. Install and activate the plugin
-2. Go to Settings and copy your Connector URL (the bearer token is embedded in the path)
-3. Paste the URL into your AI assistant as a custom MCP connector
-4. Ask the assistant to do things on your site
+2. Go to Settings and copy your Server URL
+3. Paste it into your AI assistant as a custom MCP connector
+4. The assistant sends you back to WordPress to sign in and approve the connection
+5. Ask the assistant to do things on your site
 
 No middleware, no third-party relay service. Every request goes from your AI assistant directly to your own WordPress site. You own the endpoint, you own the token, and you can revoke access at any time from Settings.
 
 = Compatible with =
 
-* Claude.ai (web and desktop) &mdash; primary integration
-* Claude Desktop app
+* ChatGPT &mdash; via OAuth
+* Google Gemini &mdash; via OAuth
+* Claude.ai (web and desktop), and Claude Code
 * Cursor
 * Windsurf
 * Any MCP-capable agent framework
+
+ChatGPT and Gemini require OAuth, which arrived in version 3.0.0. The others accept either OAuth or the legacy token.
 
 = Security =
 
 StrifeBridge MCP was designed with security as a first-class concern:
 
-* Bearer token authentication on every request, validated with constant-time `hash_equals()`
+* OAuth 2.1 with mandatory PKCE (S256 only; the `plain` method is refused), single-use 60-second authorization codes, exact-match redirect URIs, and rotating refresh tokens
+* Tokens, authorization codes, and client secrets are stored only as hashes and compared in constant time with `hash_equals()`
+* Every connection is bound to a WordPress account and subject to that account's capabilities, and can be revoked individually from Settings
 * WordPress secret keys, auth salts, and the plugin's own token are blacklisted from the options API
 * Emergency Lockdown button in Settings disables the entire API with one click
 * Every tool group (posts, media, menus, etc.) can be individually toggled off from Settings
@@ -90,7 +96,7 @@ If your site is subject to GDPR or similar regulation, note that IP addresses ar
 1. Upload the plugin files to the `/wp-content/plugins/strifebridge-mcp` directory, or install the plugin through the WordPress Plugins screen directly
 2. Activate the plugin through the Plugins screen in WordPress
 3. Go to Settings &rarr; StrifeBridge MCP to get your Connector URL
-4. Paste the Connector URL into Claude.ai (Settings &rarr; Integrations &rarr; Add custom connector) or your preferred MCP-capable AI tool
+4. Paste the Server URL into ChatGPT, Claude.ai, Gemini, or your preferred MCP-capable AI tool, then approve the connection when it sends you back to WordPress
 5. Ask the AI to manage your site
 
 == Frequently Asked Questions ==
@@ -159,28 +165,33 @@ Yes. Settings &rarr; StrifeBridge MCP has toggles for every tool group (posts, m
 
 = The assistant cannot connect, and /.well-known/oauth-authorization-server returns 404 (nginx) =
 
-Almost always nginx answering the request before WordPress ever sees it. Many nginx configurations — including the defaults shipped by several control panels and most Certbot/Let's Encrypt setups — contain a catch-all block for ACME certificate validation:
+Almost always nginx answering the request before WordPress ever sees it. Most nginx setups carry a catch-all block for ACME certificate validation, shipped by default with Certbot and by several control panels:
 
     location ^~ /.well-known/ {
         allow all;
     }
 
-The `^~` prefix tells nginx to stop looking for a better match, so *every* request under `/.well-known/` is served straight from the filesystem. OAuth discovery lives at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`, and those files do not exist on disk — the plugin generates them — so nginx returns 404 and the connector gives up before it reaches PHP.
+The `^~` modifier tells nginx that once this prefix matches it should stop looking for a better match, so *every* request under `/.well-known/` is served straight from the filesystem. The two OAuth discovery documents live at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource` and do not exist on disk — the plugin generates them — so nginx returns 404, and the assistant gives up at discovery before it ever reaches PHP. Nothing in WordPress can override this; the request never arrives.
 
-The fix is to narrow the ACME block to the path it actually needs and let everything else under `/.well-known/` reach WordPress:
+Narrow the ACME block to the path it actually needs, and route the rest of `/.well-known/` to WordPress:
 
-    location ^~ /.well-known/acme-challenge/ {
+    location ^~ /.well-known/acme-challenge/ { allow all; }
+    location ^~ /.well-known/ {
         allow all;
-        default_type "text/plain";
-    }
-
-    location /.well-known/ {
         try_files $uri $uri/ /index.php?$args;
     }
 
-Reload nginx, then confirm both URLs return JSON rather than 404. Certificate renewal is unaffected: ACME only ever uses `/.well-known/acme-challenge/`.
+Then `nginx -t` and reload, and check that both URLs return JSON.
 
-If the URLs still 404 after that, re-save Settings &rarr; Permalinks once to regenerate WordPress's rewrite rules. This affects nginx only; Apache installs serve the documents through the plugin's rewrite rules without any change.
+Both parts matter. `allow all` overrides any inherited `deny` on the path. The `^~` on the second block is doing real work and is not decorative: the very common hardening rule
+
+    location ~ /\. { deny all; }
+
+is a *regular expression* location, and nginx tries regex locations before falling back to an ordinary prefix match. A plain `location /.well-known/` therefore loses to it and the documents stay blocked. `^~` stops regex matching from being attempted at all, so the block wins. This is also why the ACME line keeps its own `^~` — it is a longer prefix, so it continues to win for certificate validation, and renewal is unaffected. ACME only ever uses `/.well-known/acme-challenge/`.
+
+If the URLs still 404 after reloading, re-save Settings &rarr; Permalinks once to regenerate WordPress's rewrite rules.
+
+This is an nginx-only problem. Apache serves the documents through the plugin's rewrite rules with no configuration change, and managed WordPress hosts are almost all unaffected.
 
 = Does OAuth work if WordPress is installed in a subdirectory? =
 
@@ -197,7 +208,7 @@ Yes, but the discovery documents live under that subdirectory — `example.com/b
 
 = 3.0.0 =
 * New: **OAuth 2.1 support.** ChatGPT, Gemini, and any other assistant whose connector expects OAuth can now connect. Previously the plugin offered only a bearer token, which those connector interfaces do not accept, so they could not be used at all. Paste the server URL into the assistant, sign in to WordPress, approve the connection, and you are done — there is no token to copy by hand.
-* New: **Connections act as a real WordPress account.** An OAuth connection is bound to the user who approved it, and every tool call now runs as that account. This is the substantive security change in this release: tool calls are subject to WordPress capability checks for the first time. A connection bound to an editor can edit posts and cannot touch site options, plugins, or users, and a leaked credential is limited to what that one account can do rather than being equivalent to an administrator.
+* New: **Connections act as a real WordPress account.** An OAuth connection is bound to the user who approved it, and every tool call runs as that account rather than as an anonymous token holder. WordPress capability checks apply to tool calls for the first time, posts are attributed to a real author, and each connection is revocable on its own without disturbing the others. Approving a connection requires an administrator in this release, so connections currently act with administrator authority; binding a connection to a lower-privileged account is coming in 3.1, and the per-tool capability enforcement it needs is already in place and active.
 * New: **Connected Applications** in Settings. Every approved assistant is listed with the account it acts as, what it was granted, and when it last made a request, each with a Revoke button. Revoking takes effect on the application's next request.
 * New: Authorization screen in wp-admin naming the application, the account it will act as, and the access it is asking for, with the return address it will be sent back to.
 * New: Dynamic Client Registration, which ChatGPT requires in order to connect at all, and both OAuth discovery documents at `/.well-known/oauth-authorization-server` and `/.well-known/oauth-protected-resource`.
@@ -284,7 +295,7 @@ Yes, but the discovery documents live under that subdirectory — `example.com/b
 == Upgrade Notice ==
 
 = 3.0.0 =
-Adds OAuth 2.1, so ChatGPT and Gemini can connect for the first time. OAuth connections are bound to a real WordPress account and are held to that account's capabilities, so a connection can now be given less than full administrator authority. Existing bearer token connections keep working exactly as they are and do not need to be reconnected — the bearer token is simply marked as the legacy path, and OAuth is recommended for anything new.
+Adds OAuth 2.1, so ChatGPT and Gemini can connect for the first time. Connections are approved from inside WordPress, act as a real account so capability checks apply, and can each be revoked from Settings. Approving requires an administrator in this release. Existing bearer token connections keep working exactly as they are and do not need to be reconnected — the bearer token is simply marked as the legacy path, and OAuth is recommended for anything new.
 
 = 2.4.0 =
 Adds an activity log so you can see exactly what your AI assistant has done, and Safe Mode guardrails (force draft, trash instead of delete, read-only). Safe Mode defaults to off on existing sites, so nothing about your current setup changes on upgrade. Also fixes AI-created posts having no author.
