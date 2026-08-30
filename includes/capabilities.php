@@ -188,6 +188,16 @@ function sbmcp_tool_scope(string $tool): string {
     $group_map = sbmcp_mcp_tool_group_map();
     $group     = $group_map[$tool] ?? null;
 
+    // A tool with no group is a tool this map does not know — an add-on's.
+    // It fails closed to the admin scope, matching sbmcp_tool_capability()'s
+    // manage_options default. 3.0.0 fell through to the read/write test
+    // instead, which classified every Pro tool as mcp:write: a grant the
+    // consent screen described as "create and change content" could run
+    // database statements, write theme files, and delete users.
+    if ($group === null) {
+        return 'mcp:admin';
+    }
+
     // The administrative surface, regardless of whether the specific call reads
     // or writes: reading options or enumerating users is an admin act.
     if (in_array($group, ['options', 'users', 'plugin_mgmt', 'system'], true)) {

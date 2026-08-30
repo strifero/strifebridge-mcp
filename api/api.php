@@ -97,11 +97,17 @@ function sbmcp_create_post(WP_REST_Request $request) {
 
     $post_data = ['post_title' => $params['title'] ?? 'Untitled', 'post_content' => $params['content'] ?? '', 'post_status' => $status, 'post_type' => $type];
 
-    // Token requests carry no logged-in user, so without this the post is
-    // stored with post_author = 0 and shows as authorless everywhere.
-    $author = sbmcp_default_author();
-    if ($author > 0) {
-        $post_data['post_author'] = $author;
+    // An OAuth request runs as a real WordPress user, and that user is the
+    // author: wp_insert_post() attributes to the current user when
+    // post_author is left unset. Only a legacy token request has nobody
+    // behind it; without the default it would store post_author = 0 and the
+    // post would show as authorless everywhere. Setting the default
+    // unconditionally, as 3.0.0 did, silently overrode the bound user.
+    if (!sbmcp_oauth_context()) {
+        $author = sbmcp_default_author();
+        if ($author > 0) {
+            $post_data['post_author'] = $author;
+        }
     }
 
     if (!empty($params['meta']) && is_array($params['meta'])) {
@@ -186,7 +192,37 @@ function sbmcp_delete_post(WP_REST_Request $request) {
         return ['status' => 'trashed', 'id' => $id];
     }
 
-    $result = wp_delete_post($id, $force);
-    if (!$result) return new WP_Error('delete_error', 'Could not delete post.', ['status' => 500]);
-    return ['status' => $force ? 'deleted' : 'trashed', 'id' => $id];
+    if (!$force) {
+        // Trash explicitly rather than relying on wp_delete_post() to do it.
+        // wp_delete_post($id, false) only diverts to the trash for 'post' and
+        // 'page', when the post is not already trashed, and when
+        // EMPTY_TRASH_DAYS is nonzero — for anything else it deletes
+        // permanently. A WooCommerce product, a wp_template, any custom post
+        // type, or a post already in the trash was therefore destroyed by a
+        // call that asked to trash it, and then reported as 'trashed' because
+        // the status below was derived from the flag rather than from what
+        // actually happened. Data loss reported as success.
+        if ($post->post_status === 'trash') {
+            return ['status' => 'trashed', 'id' => $id];
+        }
+        if (!wp_trash_post($id)) {
+            return new WP_Error('delete_error', 'Could not trash post. The trash may be disabled on this site (EMPTY_TRASH_DAYS); pass force=true to delete permanently.', ['status' => 500]);
+        }
+    } else {
+        if (!wp_delete_post($id, true)) {
+            return new WP_Error('delete_error', 'Could not delete post.', ['status' => 500]);
+        }
+    }
+
+    // Report what the post is now, never what the caller asked for. A post
+    // that no longer exists was deleted; one that still exists in the trash
+    // was trashed. Any other state means neither happened and is an error.
+    $after = get_post_status($id);
+    if ($after === false) {
+        return ['status' => 'deleted', 'id' => $id];
+    }
+    if ($after === 'trash') {
+        return ['status' => 'trashed', 'id' => $id];
+    }
+    return new WP_Error('delete_error', sprintf('Post is still present with status "%s".', $after), ['status' => 500]);
 }
