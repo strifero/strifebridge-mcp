@@ -69,54 +69,14 @@ if (!defined('ABSPATH')) {
  * @return array<string, string>
  */
 function sbmcp_tool_capabilities(): array {
-    return apply_filters('sbmcp_tool_capabilities', [
-        // Posts and pages. Reads include unpublished content.
-        'list_posts'          => 'edit_posts',
-        'list_pages'          => 'edit_posts',
-        'get_post'            => 'edit_posts',
-        'get_post_details'    => 'edit_posts',
-        'create_post'         => 'edit_posts',
-        'update_post'         => 'edit_posts',
-        'delete_post'         => 'delete_posts',
-
-        // Media.
-        'list_media'          => 'upload_files',
-        'get_media'           => 'upload_files',
-        'upload_media'        => 'upload_files',
-        'delete_media'        => 'delete_posts',
-
-        // Options are site configuration in both directions: reading them
-        // exposes configuration, writing them changes how the site runs.
-        'get_option'          => 'manage_options',
-        'update_option'       => 'manage_options',
-        'list_options'        => 'manage_options',
-
-        'list_users'          => 'list_users',
-
-        'list_plugins'        => 'activate_plugins',
-        'activate_plugin'     => 'activate_plugins',
-        'deactivate_plugin'   => 'activate_plugins',
-        'delete_plugin'       => 'delete_plugins',
-
-        'get_menus'           => 'edit_theme_options',
-        'get_menu_items'      => 'edit_theme_options',
-        'create_menu_item'    => 'edit_theme_options',
-        'update_menu_item'    => 'edit_theme_options',
-        'delete_menu_item'    => 'edit_theme_options',
-
-        'list_terms'          => 'edit_posts',
-        'create_term'         => 'manage_categories',
-        'update_term'         => 'manage_categories',
-        'delete_term'         => 'manage_categories',
-
-        'list_sidebars'       => 'edit_theme_options',
-        'get_widgets'         => 'edit_theme_options',
-        'update_widget'       => 'edit_theme_options',
-
-        'get_site_info'       => 'manage_options',
-        'flush_rewrite_rules' => 'manage_options',
-        'server_ping'         => 'read',
-    ]);
+    // Derived from the registry; the filter stays for overrides.
+    $map = [];
+    foreach (sbmcp_tool_registry() as $tool => $def) {
+        if (is_array($def) && !empty($def['capability'])) {
+            $map[$tool] = (string) $def['capability'];
+        }
+    }
+    return apply_filters('sbmcp_tool_capabilities', $map);
 }
 
 /**
@@ -185,26 +145,25 @@ function sbmcp_oauth_default_scope(): string {
  * @return string
  */
 function sbmcp_tool_scope(string $tool): string {
-    $group_map = sbmcp_mcp_tool_group_map();
-    $group     = $group_map[$tool] ?? null;
+    $def = sbmcp_tool_definition($tool);
 
-    // A tool with no group is a tool this map does not know — an add-on's.
-    // It fails closed to the admin scope, matching sbmcp_tool_capability()'s
-    // manage_options default. 3.0.0 fell through to the read/write test
-    // instead, which classified every Pro tool as mcp:write: a grant the
-    // consent screen described as "create and change content" could run
-    // database statements, write theme files, and delete users.
-    if ($group === null) {
+    // Not in the registry at all: fails closed to admin, matching the
+    // manage_options capability default.
+    if ($def === null) {
         return 'mcp:admin';
+    }
+
+    if (!empty($def['scope'])) {
+        return (string) $def['scope'];
     }
 
     // The administrative surface, regardless of whether the specific call reads
     // or writes: reading options or enumerating users is an admin act.
-    if (in_array($group, ['options', 'users', 'plugin_mgmt', 'system'], true)) {
+    if (in_array($def['group'] ?? '', sbmcp_admin_tool_groups(), true)) {
         return 'mcp:admin';
     }
 
-    return sbmcp_tool_is_write($tool) ? 'mcp:write' : 'mcp:read';
+    return !empty($def['read']) ? 'mcp:read' : 'mcp:write';
 }
 
 /**

@@ -96,43 +96,24 @@ function sbmcp_mcp_initialize($id) {
     return sbmcp_mcp_response($id, ['protocolVersion' => '2025-03-26', 'capabilities' => ['tools' => new stdClass()], 'serverInfo' => ['name' => 'StrifeBridge MCP', 'version' => SBMCP_VERSION]]);
 }
 
+/**
+ * Tool name to tool-group slug, for every tool in the registry.
+ *
+ * Derived from sbmcp_tool_registry() rather than kept as its own list, so an
+ * add-on that declares a tool there is covered by the tool-group toggle on the
+ * MCP path without further registration. The filter remains so a group can be
+ * overridden without touching the registry.
+ *
+ * @return array<string, string>
+ */
 function sbmcp_mcp_tool_group_map(): array {
-    return [
-        'list_posts'          => 'posts',
-        'list_pages'          => 'posts',
-        'get_post'            => 'posts',
-        'get_post_details'    => 'posts',
-        'create_post'         => 'posts',
-        'update_post'         => 'posts',
-        'delete_post'         => 'posts',
-        'list_media'          => 'media',
-        'get_media'           => 'media',
-        'upload_media'        => 'media',
-        'delete_media'        => 'media',
-        'get_option'          => 'options',
-        'update_option'       => 'options',
-        'list_options'        => 'options',
-        'list_users'          => 'users',
-        'list_plugins'        => 'plugin_mgmt',
-        'activate_plugin'     => 'plugin_mgmt',
-        'deactivate_plugin'   => 'plugin_mgmt',
-        'delete_plugin'       => 'plugin_mgmt',
-        'get_menus'           => 'menus',
-        'get_menu_items'      => 'menus',
-        'create_menu_item'    => 'menus',
-        'update_menu_item'    => 'menus',
-        'delete_menu_item'    => 'menus',
-        'list_terms'          => 'taxonomies',
-        'create_term'         => 'taxonomies',
-        'update_term'         => 'taxonomies',
-        'delete_term'         => 'taxonomies',
-        'list_sidebars'       => 'widgets',
-        'get_widgets'         => 'widgets',
-        'update_widget'       => 'widgets',
-        'get_site_info'       => 'system',
-        'flush_rewrite_rules' => 'system',
-        'server_ping'         => 'system',
-    ];
+    $map = [];
+    foreach (sbmcp_tool_registry() as $tool => $def) {
+        if (is_array($def) && !empty($def['group'])) {
+            $map[$tool] = (string) $def['group'];
+        }
+    }
+    return apply_filters('sbmcp_mcp_tool_group_map', $map);
 }
 
 // ---------------------------------------------------------------------------
@@ -255,7 +236,7 @@ function sbmcp_mcp_tools_call($id, $params) {
         return sbmcp_mcp_tool_error($id, $message);
     }
 
-    $denied = sbmcp_write_guard($name);
+    $denied = sbmcp_write_guard($name) ?: sbmcp_irreversible_guard($name);
     if ($denied) {
         sbmcp_audit_log($name, $input, 'denied', $denied->get_error_message());
         return sbmcp_mcp_tool_error($id, $denied->get_error_message());

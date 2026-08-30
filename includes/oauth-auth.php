@@ -131,8 +131,11 @@ function sbmcp_oauth_authenticate_token(string $token): bool {
         'token_id'  => (int) $row['id'],
     ]);
 
-    sbmcp_oauth_touch_token($row);
-    sbmcp_oauth_touch_client((string) $row['client_id']);
+    // The client touch rides on the token touch's once-a-minute throttle.
+    // Unthrottled it was an UPDATE on the clients table per request.
+    if (sbmcp_oauth_touch_token($row)) {
+        sbmcp_oauth_touch_client((string) $row['client_id']);
+    }
 
     return true;
 }

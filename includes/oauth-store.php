@@ -512,6 +512,63 @@ function sbmcp_oauth_get_refresh_token(string $refresh_token): ?array {
 }
 
 /**
+ * Finds a refresh token's row regardless of its state.
+ *
+ * Unlike sbmcp_oauth_get_refresh_token(), a revoked or expired row is returned
+ * rather than hidden, because the caller needs to tell "unknown" from "known
+ * but already used". The second is reuse, and reuse is the signal that a
+ * refresh token has been stolen.
+ *
+ * @param string $refresh_token
+ * @return array<string, mixed>|null
+ */
+function sbmcp_oauth_find_refresh_token(string $refresh_token): ?array {
+    global $wpdb;
+    $table = sbmcp_oauth_tokens_table();
+
+    $row = $wpdb->get_row(
+        $wpdb->prepare("SELECT * FROM {$table} WHERE refresh_hash = %s", sbmcp_oauth_hash($refresh_token)),
+        ARRAY_A
+    );
+    if (!$row || !sbmcp_oauth_verify($row['refresh_hash'], $refresh_token)) {
+        return null;
+    }
+    return $row;
+}
+
+/**
+ * Atomically claims a refresh token for rotation.
+ *
+ * The UPDATE is the gate, as with authorization codes: it succeeds for exactly
+ * one caller no matter how many present the same refresh token at once. The
+ * previous SELECT-then-INSERT-then-UPDATE let two concurrent rotations both
+ * succeed, each walking away with a valid pair from a single token.
+ *
+ * @param int $id Row id.
+ * @return bool True when this caller claimed it.
+ */
+function sbmcp_oauth_claim_refresh_token(int $id): bool {
+    global $wpdb;
+    $table = sbmcp_oauth_tokens_table();
+    $claimed = $wpdb->query(
+        $wpdb->prepare("UPDATE {$table} SET revoked_at = %s WHERE id = %d AND revoked_at IS NULL", sbmcp_oauth_now(), $id)
+    );
+    return $claimed === 1;
+}
+
+/**
+ * Reverses a claim when the replacement could not be written, so a database
+ * hiccup during rotation does not leave the client holding no token at all.
+ *
+ * @param int $id Row id.
+ * @return void
+ */
+function sbmcp_oauth_unclaim_refresh_token(int $id) {
+    global $wpdb;
+    $wpdb->update(sbmcp_oauth_tokens_table(), ['revoked_at' => null], ['id' => $id], ['%s'], ['%d']);
+}
+
+/**
  * Marks a token row revoked.
  *
  * @param int $id Row id.
@@ -568,14 +625,14 @@ function sbmcp_oauth_revoke_client_tokens(string $client_id, int $user_id = 0): 
  * resolution.
  *
  * @param array<string, mixed> $token_row
- * @return void
+ * @return bool Whether a write happened.
  */
-function sbmcp_oauth_touch_token(array $token_row) {
+function sbmcp_oauth_touch_token(array $token_row): bool {
     global $wpdb;
 
     $last = !empty($token_row['last_used_at']) ? strtotime($token_row['last_used_at'] . ' UTC') : 0;
     if ($last && (time() - $last) < MINUTE_IN_SECONDS) {
-        return;
+        return false;
     }
 
     $wpdb->update(
@@ -585,6 +642,7 @@ function sbmcp_oauth_touch_token(array $token_row) {
         ['%s'],
         ['%d']
     );
+    return true;
 }
 
 /**

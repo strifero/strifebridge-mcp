@@ -30,7 +30,7 @@ if (!defined('ABSPATH')) {
  * Bumped whenever the schema changes, so upgrades re-run dbDelta.
  * Compared against the sbmcp_db_version option.
  */
-define('SBMCP_DB_VERSION', '1.0');
+define('SBMCP_DB_VERSION', '1.1');
 
 /**
  * Returns the audit log table name, including the site's table prefix.
@@ -70,9 +70,12 @@ function sbmcp_audit_install_table() {
   error_msg varchar(255) DEFAULT NULL,
   ip varchar(45) DEFAULT NULL,
   token_hint varchar(12) DEFAULT NULL,
+  user_id bigint(20) unsigned DEFAULT NULL,
+  client_id varchar(64) DEFAULT NULL,
   PRIMARY KEY  (id),
   KEY ts (ts),
-  KEY tool (tool)
+  KEY tool (tool),
+  KEY user_id (user_id)
 ) {$collate};";
 
     dbDelta($sql);
@@ -111,47 +114,19 @@ add_action('plugins_loaded', 'sbmcp_audit_maybe_upgrade');
  * @return array<string, string[]>
  */
 function sbmcp_audit_loggable_args(): array {
-    // Filterable so add-ons and the OAuth endpoints can declare which of their
-    // own arguments are safe to record. The allowlist still governs: a tool that
-    // declares nothing logs nothing, and a key that is not declared is never
-    // written even if a caller passes it.
-    return apply_filters('sbmcp_audit_loggable_args', [
-        'list_posts'          => ['type', 'status', 'per_page'],
-        'list_pages'          => ['per_page'],
-        'get_post'            => ['id'],
-        'get_post_details'    => ['id', 'include', 'exclude'],
-        'create_post'         => ['title', 'status', 'type'],
-        'update_post'         => ['id', 'title', 'status'],
-        'delete_post'         => ['id', 'force'],
-        'list_media'          => ['per_page'],
-        'get_media'           => ['id'],
-        'upload_media'        => ['filename', 'title', 'url'],
-        'delete_media'        => ['id'],
-        'get_option'          => ['key'],
-        'update_option'       => ['key'],
-        'list_options'        => ['keys', 'pattern', 'max_value_bytes'],
-        'list_users'          => ['per_page'],
-        'list_plugins'        => [],
-        'activate_plugin'     => ['plugin'],
-        'deactivate_plugin'   => ['plugin'],
-        'delete_plugin'       => ['slug'],
-        'get_menus'           => [],
-        'get_menu_items'      => ['id'],
-        'create_menu_item'    => ['menu_id', 'title', 'url'],
-        'update_menu_item'    => ['id', 'title', 'url'],
-        'delete_menu_item'    => ['id'],
-        'list_terms'          => ['taxonomy', 'per_page'],
-        'create_term'         => ['name', 'taxonomy'],
-        'update_term'         => ['id', 'taxonomy', 'name', 'slug'],
-        'delete_term'         => ['id', 'taxonomy'],
-        'list_sidebars'       => [],
-        'get_widgets'         => ['id'],
-        'update_widget'       => ['widget_id'],
-        'get_site_info'       => [],
-        'flush_rewrite_rules' => [],
-        'server_ping'         => [],
-        'auth'                => [],
-    ]);
+    // Derived from the registry's per-tool 'log_args', so an add-on that
+    // declares its tools there gets a Details column without a second
+    // registration. The allowlist still governs: a tool that declares nothing
+    // logs nothing, and an undeclared key is never written.
+    $args = [];
+    foreach (sbmcp_tool_registry() as $tool => $def) {
+        $args[$tool] = (is_array($def) && isset($def['log_args']) && is_array($def['log_args'])) ? $def['log_args'] : [];
+    }
+    // Non-tool events the engine records itself.
+    $args['auth'] = [];
+    $args['rest'] = ['route'];
+
+    return apply_filters('sbmcp_audit_loggable_args', $args);
 }
 
 /**
@@ -312,6 +287,7 @@ function sbmcp_audit_log(string $tool, array $args = [], string $result = 'succe
         }
 
         $error_msg = $error_msg !== null ? substr(sanitize_text_field($error_msg), 0, 255) : null;
+        $context   = function_exists('sbmcp_oauth_context') ? sbmcp_oauth_context() : null;
 
         $row = [
             'ts'           => gmdate('Y-m-d H:i:s'),
@@ -321,8 +297,15 @@ function sbmcp_audit_log(string $tool, array $args = [], string $result = 'succe
             'error_msg'    => $error_msg,
             'ip'           => sbmcp_audit_ip_logging_enabled() ? sbmcp_audit_client_ip() : null,
             'token_hint'   => sbmcp_audit_token_hint(),
+            // Who. An OAuth request has a bound user and a client; an Abilities
+            // request has the logged-in user; a legacy token request has
+            // neither, and both stay NULL. token_hint is an HMAC of the access
+            // token, which rotates hourly under OAuth, so without these two
+            // columns an OAuth log could not be grouped by anything.
+            'user_id'      => $context ? $context['user_id'] : (get_current_user_id() ?: null),
+            'client_id'    => $context ? substr((string) $context['client_id'], 0, 64) : null,
         ];
-        $format = ['%s', '%s', '%s', '%s', '%s', '%s', '%s'];
+        $format = ['%s', '%s', '%s', '%s', '%s', '%s', '%s', '%d', '%s'];
 
         // Errors are suppressed across both attempts: a missing table would
         // otherwise have $wpdb echo "Table doesn't exist" straight into the
@@ -352,14 +335,83 @@ function sbmcp_audit_log(string $tool, array $args = [], string $result = 'succe
 
         $wpdb->suppress_errors($was_suppressing);
 
-        // Still failing after the rebuild (no DB, no CREATE permission): give up
-        // quietly. The tool call this describes has already run and must not be
-        // turned into an error by its own logging.
+        // Still failing after the rebuild (no DB, no CREATE permission): the
+        // tool call this describes has already run and must not be turned into
+        // an error by its own logging — but the failure must not be invisible
+        // either. "No activity recorded yet" looks identical whether nothing
+        // has happened or logging is broken, and for an accountability feature
+        // that is the worst way to fail. Record the failure so the admin can be
+        // told, and clear it on the next write that succeeds.
+        if ($written === false) {
+            sbmcp_audit_record_failure($wpdb->last_error ?: 'insert failed');
+        } elseif (get_option('sbmcp_audit_last_failure')) {
+            delete_option('sbmcp_audit_last_failure');
+        }
     } catch (Throwable $e) {
         // Swallowed on purpose: the tool call it describes has already run.
+        sbmcp_audit_record_failure($e->getMessage());
         return;
     }
 }
+
+/**
+ * Remembers that the most recent log write failed.
+ *
+ * Autoloaded so the success-path check above costs nothing; the value is
+ * small. Wrapped in its own try so a failing options table cannot turn the
+ * failure report into a second failure.
+ *
+ * @param string $error
+ * @return void
+ */
+function sbmcp_audit_record_failure(string $error) {
+    try {
+        update_option('sbmcp_audit_last_failure', [
+            'ts'    => time(),
+            'error' => substr(sanitize_text_field($error), 0, 255),
+        ], true);
+    } catch (Throwable $e) {
+        // Nothing left to do.
+    }
+}
+
+/**
+ * The most recent logging failure, or null when the last write succeeded.
+ *
+ * @return array{ts:int, error:string}|null
+ */
+function sbmcp_audit_last_failure(): ?array {
+    $failure = get_option('sbmcp_audit_last_failure');
+    return (is_array($failure) && !empty($failure['ts'])) ? $failure : null;
+}
+
+/**
+ * Tells an administrator, on every admin screen, that tool calls are running
+ * unrecorded. Shown everywhere rather than only on the settings page for the
+ * same reason as Pro's grace notice: the person who needs to see it may never
+ * open Settings.
+ *
+ * @return void
+ */
+function sbmcp_audit_failure_notice() {
+    if (!current_user_can('manage_options')) {
+        return;
+    }
+    $failure = sbmcp_audit_last_failure();
+    if (!$failure) {
+        return;
+    }
+    ?>
+    <div class="notice notice-error">
+        <p>
+            <strong><?php esc_html_e('StrifeBridge MCP activity logging is failing.', 'strifebridge-mcp'); ?></strong>
+            <?php esc_html_e('Tool calls are still running, but they are not being recorded. The activity log cannot be relied on until this is fixed.', 'strifebridge-mcp'); ?>
+        </p>
+        <p><code><?php echo esc_html($failure['error']); ?></code> — <?php echo esc_html(get_date_from_gmt(gmdate('Y-m-d H:i:s', (int) $failure['ts']), 'Y-m-d H:i')); ?></p>
+    </div>
+    <?php
+}
+add_action('admin_notices', 'sbmcp_audit_failure_notice');
 
 /**
  * Error codes that mean the plugin REFUSED a call, rather than attempted it and
@@ -381,6 +433,7 @@ function sbmcp_audit_denial_codes(): array {
     return apply_filters('sbmcp_audit_denial_codes', [
         // Safe Mode and tool-group policy.
         'read_only_mode', 'safe_mode_publish_blocked', 'wrong_tool_group',
+        'trash_not_delete_blocked', 'unguarded_route',
         // Security guards.
         'forbidden', 'forbidden_sensitive_option', 'forbidden_self',
         // Upload and payload guards.
@@ -506,7 +559,7 @@ function sbmcp_audit_log_query(array $args = []): array {
     $params[] = $limit;
     $params[] = $offset;
 
-    $sql = 'SELECT id, ts, tool, args_summary, result, error_msg, ip, token_hint FROM ' . $table
+    $sql = 'SELECT id, ts, tool, args_summary, result, error_msg, ip, token_hint, user_id, client_id FROM ' . $table
          . ' WHERE ' . implode(' AND ', $where)
          . ' ORDER BY id DESC LIMIT %d OFFSET %d';
 

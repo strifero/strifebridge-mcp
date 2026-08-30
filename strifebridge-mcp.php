@@ -21,6 +21,7 @@ define('SBMCP_PATH', plugin_dir_path(__FILE__));
 define('SBMCP_URL',  plugin_dir_url(__FILE__));
 
 require_once SBMCP_PATH . 'includes/helpers.php';
+require_once SBMCP_PATH . 'includes/tool-registry.php';
 require_once SBMCP_PATH . 'includes/audit-log.php';
 require_once SBMCP_PATH . 'includes/safe-mode.php';
 require_once SBMCP_PATH . 'includes/auth.php';

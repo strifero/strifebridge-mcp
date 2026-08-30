@@ -443,15 +443,34 @@ function sbmcp_oauth_grant_refresh_token(WP_REST_Request $request): WP_REST_Resp
     }
     $client = $authenticated['client'];
 
-    $row = sbmcp_oauth_get_refresh_token($refresh);
+    $row = sbmcp_oauth_find_refresh_token($refresh);
     if (!$row) {
-        sbmcp_audit_log('oauth_token', ['client_id' => $client_id, 'grant_type' => 'refresh_token'], 'denied', 'Refresh refused: token is unknown, revoked, or expired.');
+        sbmcp_audit_log('oauth_token', ['client_id' => $client_id, 'grant_type' => 'refresh_token'], 'denied', 'Refresh refused: token is unknown.');
         return sbmcp_oauth_error_response('invalid_grant', __('That refresh token is not valid. Reconnect the application.', 'strifebridge-mcp'));
     }
 
     if (!hash_equals((string) $row['client_id'], $client['client_id'])) {
         sbmcp_audit_log('oauth_token', ['client_id' => $client_id, 'grant_type' => 'refresh_token'], 'denied', 'Refresh refused: token belongs to a different client.');
         return sbmcp_oauth_error_response('invalid_grant', __('That refresh token was not issued to this application.', 'strifebridge-mcp'));
+    }
+
+    // Reuse detection. A refresh token is good for exactly one rotation, so a
+    // known token that has already been rotated is being presented a second
+    // time — either the legitimate client lost the response and is retrying,
+    // or someone else has a copy. The two cannot be told apart, and the safe
+    // reading is theft: revoke every token this client holds for this user, so
+    // whichever party has the live pair loses it too. The legitimate user
+    // reconnects; a thief's copy dies with it. This is the OAuth 2.1 guidance
+    // for rotation, and it turns a silent compromise into a visible one.
+    if (!empty($row['revoked_at'])) {
+        $revoked = sbmcp_oauth_revoke_client_tokens((string) $row['client_id'], (int) $row['user_id']);
+        sbmcp_audit_log('oauth_token', ['client_id' => $client_id, 'grant_type' => 'refresh_token'], 'denied', sprintf('Refresh token reuse detected: revoked %d live token(s) for this client and user.', $revoked));
+        return sbmcp_oauth_error_response('invalid_grant', __('That refresh token has already been used. All tokens for this connection have been revoked as a precaution; reconnect the application.', 'strifebridge-mcp'));
+    }
+
+    if (empty($row['refresh_expires_at']) || strtotime($row['refresh_expires_at'] . ' UTC') <= time()) {
+        sbmcp_audit_log('oauth_token', ['client_id' => $client_id, 'grant_type' => 'refresh_token'], 'denied', 'Refresh refused: token expired.');
+        return sbmcp_oauth_error_response('invalid_grant', __('That refresh token has expired. Reconnect the application.', 'strifebridge-mcp'));
     }
 
     // The bound account can disappear between issue and refresh.
@@ -461,15 +480,23 @@ function sbmcp_oauth_grant_refresh_token(WP_REST_Request $request): WP_REST_Resp
         return sbmcp_oauth_error_response('invalid_grant', __('The account this connection belongs to no longer exists.', 'strifebridge-mcp'));
     }
 
+    // Claim first, atomically. Two concurrent presentations of the same token
+    // reach this line together; exactly one gets true. The loser is handled as
+    // reuse — which, for a token that was live a millisecond ago, it is.
+    if (!sbmcp_oauth_claim_refresh_token((int) $row['id'])) {
+        $revoked = sbmcp_oauth_revoke_client_tokens((string) $row['client_id'], (int) $row['user_id']);
+        sbmcp_audit_log('oauth_token', ['client_id' => $client_id, 'grant_type' => 'refresh_token'], 'denied', sprintf('Concurrent refresh of one token: revoked %d live token(s) for this client and user.', $revoked));
+        return sbmcp_oauth_error_response('invalid_grant', __('That refresh token has already been used. All tokens for this connection have been revoked as a precaution; reconnect the application.', 'strifebridge-mcp'));
+    }
+
     $tokens = sbmcp_oauth_issue_tokens($client['client_id'], (int) $row['user_id'], (string) $row['scope']);
     if (!$tokens) {
+        // Give the old token back rather than leave the client with nothing.
+        sbmcp_oauth_unclaim_refresh_token((int) $row['id']);
         sbmcp_audit_log('oauth_token', ['client_id' => $client_id, 'grant_type' => 'refresh_token'], 'error', 'Refresh failed: could not write the replacement token.');
         return sbmcp_oauth_error_response('server_error', __('Could not issue a token.', 'strifebridge-mcp'), 500);
     }
 
-    // Revoked only after the replacement exists, so a failed write does not
-    // leave the client with neither token.
-    sbmcp_oauth_revoke_token_row((int) $row['id']);
     sbmcp_oauth_touch_client($client['client_id']);
     sbmcp_audit_log('oauth_token', ['client_id' => $client_id, 'grant_type' => 'refresh_token', 'scope' => $row['scope']], 'success');
 

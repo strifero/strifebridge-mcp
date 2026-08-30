@@ -59,7 +59,7 @@ function sbmcp_safe_mode_options(): array {
         ],
         'trash_not_delete' => [
             'label'       => 'Trash instead of delete',
-            'description' => 'Deleting a post moves it to the trash instead of removing it permanently, so it can be restored.',
+            'description' => 'Nothing is removed permanently. Posts and pages go to the trash instead; media does too when the media trash is enabled. Anything with no trash to go to — terms, menu items, plugins, and add-on tools that say so — is refused rather than deleted.',
         ],
         'read_only' => [
             'label'       => 'Read-only mode',
@@ -79,17 +79,16 @@ function sbmcp_safe_mode_options(): array {
  * @return string[]
  */
 function sbmcp_read_only_tools(): array {
-    return [
-        'list_posts', 'list_pages', 'get_post', 'get_post_details',
-        'list_media', 'get_media',
-        'get_option', 'list_options',
-        'list_users',
-        'list_plugins',
-        'get_menus', 'get_menu_items',
-        'list_terms',
-        'list_sidebars', 'get_widgets',
-        'get_site_info', 'server_ping',
-    ];
+    // Derived from the registry: a tool is a read only if it says so. An
+    // add-on tool that declares nothing is a write, which is the direction a
+    // mistake should fall.
+    $reads = [];
+    foreach (sbmcp_tool_registry() as $tool => $def) {
+        if (is_array($def) && !empty($def['read'])) {
+            $reads[] = $tool;
+        }
+    }
+    return $reads;
 }
 
 /**
@@ -120,18 +119,129 @@ function sbmcp_write_guard(string $tool) {
 }
 
 /**
- * Wraps a REST callback so it is guarded by read-only mode and recorded in the
- * audit log.
+ * Returns a WP_Error when "Trash instead of delete" should refuse this tool,
+ * else null.
+ *
+ * delete_post and delete_media honour the setting by trashing. A tool that has
+ * declared itself irreversible in the registry has nowhere to trash to, so the
+ * only way to honour "nothing is removed permanently" is to refuse it.
+ *
+ * @param string $tool Tool name.
+ * @return WP_Error|null
+ */
+function sbmcp_irreversible_guard(string $tool) {
+    if (!sbmcp_safe_mode_enabled('trash_not_delete') || !sbmcp_tool_is_irreversible($tool)) {
+        return null;
+    }
+    return new WP_Error(
+        'trash_not_delete_blocked',
+        sprintf(
+            'Safe Mode "Trash instead of delete" is enabled in StrifeBridge MCP Settings, and %s cannot be undone — there is no trash for it to go to. Turn the setting off to allow permanent deletions.',
+            $tool
+        ),
+        ['status' => 403]
+    );
+}
+
+/**
+ * Tracks the closures produced by sbmcp_guarded_callback(), so the REST
+ * enforcement filter below can tell a guarded route from a raw handler.
+ *
+ * @param Closure|null $register Closure to record.
+ * @return array<int, true> Registered closure ids.
+ */
+function sbmcp_rest_guarded_callbacks(?Closure $register = null): array {
+    static $ids = [];
+    if ($register !== null) {
+        $ids[spl_object_id($register)] = true;
+    }
+    return $ids;
+}
+
+/**
+ * Callbacks under the plugin's REST namespaces that are legitimately not tool
+ * handlers and so are not wrapped: the MCP transport and the OAuth endpoints.
+ * An add-on with a non-tool endpoint declares it through the filter.
+ *
+ * @return string[]
+ */
+function sbmcp_rest_unguarded_callbacks(): array {
+    return apply_filters('sbmcp_rest_unguarded_callbacks', [
+        'sbmcp_mcp_handler',
+        'sbmcp_oauth_authorize_handler',
+        'sbmcp_oauth_token_handler',
+        'sbmcp_oauth_register_handler',
+        'sbmcp_oauth_revoke_handler',
+    ]);
+}
+
+/**
+ * Refuses any route in the plugin's namespaces whose callback is neither a
+ * guarded closure nor a declared non-tool endpoint.
+ *
+ * This is what makes it impossible to register a tool route unguarded. Before
+ * it, an add-on that passed a raw handler to register_rest_route() got a route
+ * that skipped read-only mode, the capability and scope gate, and the activity
+ * log — and Pro's every route did exactly that. Rather than trying to guard
+ * such a route generically (the tool name is not knowable from a bare
+ * callback), the request is refused with a message naming the fix, and the
+ * refusal is logged so the administrator can see an add-on needs updating.
+ *
+ * Runs before the permission callback, so the response is 403 even for an
+ * unauthenticated caller; the log entry is throttled per route and IP so a
+ * scan cannot flood the table.
+ *
+ * @param WP_REST_Response|WP_Error|null $response
+ * @param array                          $handler
+ * @param WP_REST_Request                $request
+ * @return WP_REST_Response|WP_Error|null
+ */
+function sbmcp_rest_enforce_guard($response, $handler, $request) {
+    if ($response !== null) {
+        return $response;
+    }
+
+    $route = $request->get_route();
+    if (strpos($route, '/strifebridge/v1') !== 0 && strpos($route, '/pressbridge/v1') !== 0) {
+        return $response;
+    }
+
+    $callback = $handler['callback'] ?? null;
+
+    if ($callback instanceof Closure && isset(sbmcp_rest_guarded_callbacks()[spl_object_id($callback)])) {
+        return $response;
+    }
+    if (is_string($callback) && in_array($callback, sbmcp_rest_unguarded_callbacks(), true)) {
+        return $response;
+    }
+
+    $key = 'sbmcp_unguarded_' . md5($route . '|' . (sbmcp_audit_client_ip() ?: 'unknown'));
+    if (!get_transient($key)) {
+        set_transient($key, 1, MINUTE_IN_SECONDS);
+        sbmcp_audit_log('rest', ['route' => $route], 'denied', 'Route is registered without StrifeBridge guards and was refused. The add-on that registers it needs updating.');
+    }
+
+    return new WP_Error(
+        'unguarded_route',
+        'This endpoint is registered without StrifeBridge MCP\'s guards and has been refused. The add-on that registers it must wrap its routes in sbmcp_guarded_callback().',
+        ['status' => 403]
+    );
+}
+add_filter('rest_request_before_callbacks', 'sbmcp_rest_enforce_guard', 10, 3);
+
+/**
+ * Wraps a REST callback so it is guarded by read-only mode, the capability and
+ * scope gate, and "trash instead of delete", and recorded in the audit log.
  *
  * @param string   $tool    Tool name used in the log.
  * @param callable $handler The underlying REST callback.
  * @return callable
  */
 function sbmcp_guarded_callback(string $tool, callable $handler): callable {
-    return function (WP_REST_Request $request) use ($tool, $handler) {
+    $wrapped = function (WP_REST_Request $request) use ($tool, $handler) {
         $args = $request->get_params();
 
-        $denied = sbmcp_write_guard($tool);
+        $denied = sbmcp_write_guard($tool) ?: sbmcp_irreversible_guard($tool);
         if ($denied) {
             sbmcp_audit_log($tool, $args, 'denied', $denied->get_error_message());
             return $denied;
@@ -157,6 +267,9 @@ function sbmcp_guarded_callback(string $tool, callable $handler): callable {
         }
         return $result;
     };
+
+    sbmcp_rest_guarded_callbacks($wrapped);
+    return $wrapped;
 }
 
 /**

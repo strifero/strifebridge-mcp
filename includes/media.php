@@ -174,6 +174,25 @@ function sbmcp_delete_media(WP_REST_Request $request) {
     $id   = (int) $request['id'];
     $post = get_post($id);
     if (!$post || $post->post_type !== 'attachment') return new WP_Error('not_found', 'Media item not found.', ['status' => 404]);
+
+    // Safe Mode: honour "trash instead of delete". Attachments only have a
+    // trash when MEDIA_TRASH is on; without it there is nowhere to move the
+    // file, so the deletion is refused rather than silently made permanent.
+    if (sbmcp_safe_mode_enabled('trash_not_delete')) {
+        if ($post->post_status === 'trash') {
+            return ['status' => 'trashed', 'id' => $id];
+        }
+        if (!defined('MEDIA_TRASH') || !MEDIA_TRASH) {
+            return new WP_Error(
+                'trash_not_delete_blocked',
+                'Safe Mode "Trash instead of delete" is enabled in StrifeBridge MCP Settings, and this site has no media trash (MEDIA_TRASH is off), so the file would be removed permanently. Enable MEDIA_TRASH in wp-config.php, or turn the setting off.',
+                ['status' => 403]
+            );
+        }
+        if (!wp_trash_post($id)) return new WP_Error('delete_error', 'Could not trash media item.', ['status' => 500]);
+        return ['status' => 'trashed', 'id' => $id];
+    }
+
     $result = wp_delete_attachment($id, true);
     if (!$result) return new WP_Error('delete_error', 'Could not delete media item.', ['status' => 500]);
     return ['status' => 'deleted', 'id' => $id];

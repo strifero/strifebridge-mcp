@@ -24,6 +24,7 @@ delete_option('sbmcp_log_ip');
 delete_option('sbmcp_oauth_db_version');
 delete_option('sbmcp_oauth_registration_disabled');
 delete_option('sbmcp_rewrite_version');
+delete_option('sbmcp_audit_last_failure');
 
 // Audit log table and its scheduled prune.
 wp_clear_scheduled_hook('sbmcp_audit_prune_event');

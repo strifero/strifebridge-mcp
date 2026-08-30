@@ -357,11 +357,24 @@ function sbmcp_settings_page() {
                                     <th><?php esc_html_e('Tool', 'strifebridge-mcp'); ?></th>
                                     <th><?php esc_html_e('Details', 'strifebridge-mcp'); ?></th>
                                     <th><?php esc_html_e('Result', 'strifebridge-mcp'); ?></th>
+                                    <th><?php esc_html_e('Who', 'strifebridge-mcp'); ?></th>
                                     <th><?php esc_html_e('IP', 'strifebridge-mcp'); ?></th>
                                 </tr>
                             </thead>
                             <tbody>
                             <?php foreach ($recent_activity as $row): ?>
+                                <?php
+                                $who_user = !empty($row['user_id']) ? get_userdata((int) $row['user_id']) : null;
+                                if ($who_user) {
+                                    $who = $who_user->user_login;
+                                } elseif (!empty($row['user_id'])) {
+                                    $who = __('deleted user', 'strifebridge-mcp');
+                                } elseif ($row['tool'] === 'auth' || $row['tool'] === 'rest') {
+                                    $who = '';
+                                } else {
+                                    $who = __('legacy token', 'strifebridge-mcp');
+                                }
+                                ?>
                                 <tr>
                                     <td><?php echo esc_html(get_date_from_gmt($row['ts'], 'Y-m-d H:i')); ?></td>
                                     <td><code><?php echo esc_html($row['tool']); ?></code></td>
@@ -372,6 +385,7 @@ function sbmcp_settings_page() {
                                             <div class="sb-tool-desc"><?php echo esc_html($row['error_msg']); ?></div>
                                         <?php endif; ?>
                                     </td>
+                                    <td class="sb-tool-desc"><?php echo esc_html($who); ?></td>
                                     <td class="sb-tool-desc"><?php echo esc_html($row['ip'] ?? ''); ?></td>
                                 </tr>
                             <?php endforeach; ?>
