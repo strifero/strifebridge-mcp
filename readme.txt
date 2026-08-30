@@ -4,7 +4,7 @@ Tags: mcp, claude, ai, automation, rest-api
 Requires at least: 5.6
 Tested up to: 7.1
 Requires PHP: 7.4
-Stable tag: 3.0.0
+Stable tag: 3.0.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -206,6 +206,11 @@ Yes, but the discovery documents live under that subdirectory — `example.com/b
 
 == Changelog ==
 
+= 3.0.1 =
+* Fix (data loss): `delete_post` without `force` permanently deleted anything that was not a plain post or page — WooCommerce products, block theme templates, any custom post type, and posts already in the trash — and reported the result as "trashed". `wp_delete_post()` only diverts to the trash for the `post` and `page` types, and the reported status was taken from the request rather than from what happened. The tool now trashes explicitly, refuses with a clear error when the trash is unavailable, and reports the post's actual state afterwards. Sites with Safe Mode "Trash instead of delete" enabled were already protected.
+* Fix: posts created through an OAuth connection are now attributed to the account that approved the connection, as the 3.0.0 notes said they would be. They were being attributed to the "Author for AI-created posts" setting instead, which only looked correct when the two happened to be the same user.
+* Security: a tool the plugin does not recognise — an add-on's — now requires the `mcp:admin` scope. In 3.0.0 such tools fell through to `mcp:write`, so a connection approved as "create and change content" could reach add-on tools that manage files, the database, and users.
+
 = 3.0.0 =
 * New: **OAuth 2.1 support.** ChatGPT, Gemini, and any other assistant whose connector expects OAuth can now connect. Previously the plugin offered only a bearer token, which those connector interfaces do not accept, so they could not be used at all. Paste the server URL into the assistant, sign in to WordPress, approve the connection, and you are done — there is no token to copy by hand.
 * New: **Connections act as a real WordPress account.** An OAuth connection is bound to the user who approved it, and every tool call runs as that account rather than as an anonymous token holder. WordPress capability checks apply to tool calls for the first time, posts are attributed to a real author, and each connection is revocable on its own without disturbing the others. Approving a connection requires an administrator in this release, so connections currently act with administrator authority; binding a connection to a lower-privileged account is coming in 3.1, and the per-tool capability enforcement it needs is already in place and active.
@@ -293,6 +298,9 @@ Yes, but the discovery documents live under that subdirectory — `example.com/b
 * Extension hooks for add-on plugins
 
 == Upgrade Notice ==
+
+= 3.0.1 =
+Data-loss fix, recommended for all users. `delete_post` without `force` permanently deleted custom post types (products, templates) and already-trashed posts while reporting them as trashed. Also fixes OAuth post attribution and tightens the scope required for add-on tools.
 
 = 3.0.0 =
 Adds OAuth 2.1, so ChatGPT and Gemini can connect for the first time. Connections are approved from inside WordPress, act as a real account so capability checks apply, and can each be revoked from Settings. Approving requires an administrator in this release. Existing bearer token connections keep working exactly as they are and do not need to be reconnected — the bearer token is simply marked as the legacy path, and OAuth is recommended for anything new.
