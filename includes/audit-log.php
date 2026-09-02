@@ -592,9 +592,10 @@ function sbmcp_audit_log_count(): int {
 function sbmcp_audit_prune() {
     global $wpdb;
 
-    $days = (int) apply_filters('sbmcp_audit_log_retention_days', 30);
-    $rows = (int) apply_filters('sbmcp_audit_log_retention_rows', 1000);
-    $table = sbmcp_audit_table();
+    $limits = sbmcp_audit_retention_limits();
+    $days   = $limits['days'];
+    $rows   = $limits['rows'];
+    $table  = sbmcp_audit_table();
 
     if ($days > 0) {
         $cutoff = gmdate('Y-m-d H:i:s', time() - ($days * DAY_IN_SECONDS));
@@ -611,6 +612,23 @@ function sbmcp_audit_prune() {
     }
 }
 add_action('sbmcp_audit_prune_event', 'sbmcp_audit_prune');
+
+/**
+ * The retention window actually in effect, after add-on filters.
+ *
+ * Single source of truth for both the prune and the admin page that describes
+ * it. Keeping the defaults in one place is the point: when the two were read
+ * separately the settings page could advertise a window the prune no longer
+ * enforced.
+ *
+ * @return array{days:int,rows:int} 0 in either dimension means unlimited.
+ */
+function sbmcp_audit_retention_limits() {
+    return [
+        'days' => (int) apply_filters('sbmcp_audit_log_retention_days', 30),
+        'rows' => (int) apply_filters('sbmcp_audit_log_retention_rows', 1000),
+    ];
+}
 
 /**
  * Schedules the daily prune. Safe to call repeatedly.

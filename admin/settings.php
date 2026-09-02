@@ -394,8 +394,13 @@ function sbmcp_settings_page() {
                     <?php endif; ?>
 
                     <p class="sb-tool-desc sb-activity-upsell">
-                        <?php esc_html_e('Showing the last 10 actions. StrifeBridge MCP Pro keeps full searchable history with CSV export.', 'strifebridge-mcp'); ?>
-                        <a href="https://strifetech.com/strifebridge-mcp/#pricing" target="_blank" rel="noopener"><?php esc_html_e('Learn more →', 'strifebridge-mcp'); ?></a>
+                        <?php if (sbmcp_pro_is_present()) : ?>
+                            <?php esc_html_e('Showing the last 10 actions.', 'strifebridge-mcp'); ?>
+                            <?php echo esc_html(sbmcp_admin_retention_summary()); ?>
+                        <?php else : ?>
+                            <?php esc_html_e('Showing the last 10 actions. StrifeBridge MCP Pro keeps full searchable history with CSV export.', 'strifebridge-mcp'); ?>
+                            <a href="https://strifetech.com/strifebridge-mcp/#pricing" target="_blank" rel="noopener"><?php esc_html_e('Learn more →', 'strifebridge-mcp'); ?></a>
+                        <?php endif; ?>
                     </p>
                 </div>
 
@@ -507,19 +512,27 @@ function sbmcp_settings_page() {
 
             <!-- Sidebar -->
             <div class="sb-sidebar">
-                <div class="sb-sidebar-card">
-                    <h3><?php esc_html_e('Take StrifeBridge to the Next Level', 'strifebridge-mcp'); ?></h3>
-                    <ul>
-                        <li><?php esc_html_e('Theme file editing', 'strifebridge-mcp'); ?></li>
-                        <li><?php esc_html_e('Plugin file editing', 'strifebridge-mcp'); ?></li>
-                        <li><?php esc_html_e('Database access', 'strifebridge-mcp'); ?></li>
-                        <li><?php esc_html_e('User management', 'strifebridge-mcp'); ?></li>
-                        <li><?php esc_html_e('Error log & cron', 'strifebridge-mcp'); ?></li>
-                        <li><?php esc_html_e('Priority support', 'strifebridge-mcp'); ?></li>
-                    </ul>
-                    <br>
-                    <a href="https://strifetech.com/strifebridge-mcp/#pricing" target="_blank" rel="noopener" class="sb-promo-btn"><?php esc_html_e('Get StrifeBridge MCP Pro', 'strifebridge-mcp'); ?></a>
-                </div>
+                <?php if (sbmcp_pro_is_present()) : ?>
+                    <div class="sb-sidebar-card">
+                        <h3><?php esc_html_e('StrifeBridge MCP Pro is active', 'strifebridge-mcp'); ?></h3>
+                        <p><?php esc_html_e('Thanks for supporting StrifeBridge. Your license and retention settings are further down this page.', 'strifebridge-mcp'); ?></p>
+                        <p><a href="#sbmcp-pro-license"><?php esc_html_e('Manage license', 'strifebridge-mcp'); ?></a></p>
+                    </div>
+                <?php else : ?>
+                    <div class="sb-sidebar-card">
+                        <h3><?php esc_html_e('Take StrifeBridge to the Next Level', 'strifebridge-mcp'); ?></h3>
+                        <ul>
+                            <li><?php esc_html_e('Theme file editing', 'strifebridge-mcp'); ?></li>
+                            <li><?php esc_html_e('Plugin file editing', 'strifebridge-mcp'); ?></li>
+                            <li><?php esc_html_e('Database access', 'strifebridge-mcp'); ?></li>
+                            <li><?php esc_html_e('User management', 'strifebridge-mcp'); ?></li>
+                            <li><?php esc_html_e('Error log & cron', 'strifebridge-mcp'); ?></li>
+                            <li><?php esc_html_e('Priority support', 'strifebridge-mcp'); ?></li>
+                        </ul>
+                        <br>
+                        <a href="https://strifetech.com/strifebridge-mcp/#pricing" target="_blank" rel="noopener" class="sb-promo-btn"><?php esc_html_e('Get StrifeBridge MCP Pro', 'strifebridge-mcp'); ?></a>
+                    </div>
+                <?php endif; ?>
                 <div class="sb-sidebar-card">
                     <h3><?php esc_html_e('Community', 'strifebridge-mcp'); ?></h3>
                     <p><a href="https://github.com/strifero/strifebridge-mcp/discussions" target="_blank" rel="noopener"><?php esc_html_e('GitHub Discussions', 'strifebridge-mcp'); ?></a></p>
@@ -545,4 +558,45 @@ function sbmcp_settings_page() {
         ?>
     </div>
     <?php
+}
+
+/**
+ * One sentence describing the audit-log retention actually in effect.
+ *
+ * Shown in place of the Pro upsell once Pro is present. The numbers come from
+ * sbmcp_audit_retention_limits(), the same values the prune enforces, so the
+ * sentence cannot drift from the behaviour it describes. Either dimension may
+ * be 0, meaning unlimited, and both may be: an add-on can lift the age window
+ * and the row ceiling independently, so all four combinations are reachable.
+ *
+ * @return string Translated, unescaped.
+ */
+function sbmcp_admin_retention_summary() {
+    $limits = sbmcp_audit_retention_limits();
+    $days   = $limits['days'];
+    $rows   = $limits['rows'];
+
+    if ($days > 0 && $rows > 0) {
+        return sprintf(
+            /* translators: 1: number of days, 2: number of log entries. */
+            __('History is kept for %1$s days or %2$s entries, whichever comes first.', 'strifebridge-mcp'),
+            number_format_i18n($days),
+            number_format_i18n($rows)
+        );
+    }
+    if ($days > 0) {
+        return sprintf(
+            /* translators: %s: number of days. */
+            __('History is kept for %s days.', 'strifebridge-mcp'),
+            number_format_i18n($days)
+        );
+    }
+    if ($rows > 0) {
+        return sprintf(
+            /* translators: %s: number of log entries. */
+            __('The most recent %s entries are kept.', 'strifebridge-mcp'),
+            number_format_i18n($rows)
+        );
+    }
+    return __('Full history is kept, with no retention limit.', 'strifebridge-mcp');
 }

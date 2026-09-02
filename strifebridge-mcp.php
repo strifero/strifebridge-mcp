@@ -126,7 +126,7 @@ function sbmcp_action_links($links) {
         array_unshift($links, sprintf(
             '<a href="%s" target="_blank" rel="noopener" style="color:#39b54a;font-weight:600;">%s</a>',
             esc_url('https://strifetech.com/strifebridge-mcp/#pricing'),
-            esc_html__('Unlock Pro', 'strifebridge-mcp')
+            esc_html__('Get Pro', 'strifebridge-mcp')
         ));
     }
 
