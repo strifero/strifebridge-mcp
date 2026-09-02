@@ -578,17 +578,17 @@ function sbmcp_admin_retention_summary() {
 
     if ($days > 0 && $rows > 0) {
         return sprintf(
-            /* translators: 1: number of days, 2: number of log entries. */
-            __('History is kept for %1$s days or %2$s entries, whichever comes first.', 'strifebridge-mcp'),
-            number_format_i18n($days),
+            /* translators: 1: retention window, e.g. "90 days" or "1 year". 2: number of log entries. */
+            __('History is kept for %1$s or %2$s entries, whichever comes first.', 'strifebridge-mcp'),
+            sbmcp_admin_retention_days_label($days),
             number_format_i18n($rows)
         );
     }
     if ($days > 0) {
         return sprintf(
-            /* translators: %s: number of days. */
-            __('History is kept for %s days.', 'strifebridge-mcp'),
-            number_format_i18n($days)
+            /* translators: %s: retention window, e.g. "90 days" or "1 year". */
+            __('History is kept for %s.', 'strifebridge-mcp'),
+            sbmcp_admin_retention_days_label($days)
         );
     }
     if ($rows > 0) {
@@ -599,4 +599,33 @@ function sbmcp_admin_retention_summary() {
         );
     }
     return __('Full history is kept, with no retention limit.', 'strifebridge-mcp');
+}
+
+/**
+ * Names a retention window the way the setting that produced it does.
+ *
+ * Mirrors the labels in Pro's own retention dropdown, so someone who chose
+ * "1 year" reads "1 year" back rather than "365 days" and has to do the
+ * arithmetic to satisfy themselves the two agree.
+ *
+ * Any other value falls back to the plain day count: the window arrives
+ * through a filter, so an add-on can set one that no dropdown offers.
+ *
+ * @param int $days Retention window in days; always greater than zero here.
+ * @return string Translated, unescaped.
+ */
+function sbmcp_admin_retention_days_label($days) {
+    switch ($days) {
+        case 30:
+            return __('30 days', 'strifebridge-mcp');
+        case 90:
+            return __('90 days', 'strifebridge-mcp');
+        case 365:
+            return __('1 year', 'strifebridge-mcp');
+    }
+    return sprintf(
+        /* translators: %s: number of days. */
+        __('%s days', 'strifebridge-mcp'),
+        number_format_i18n($days)
+    );
 }
