@@ -96,9 +96,40 @@ function sbmcp_deactivate() {
     delete_option('sbmcp_rewrite_version');
 }
 
+/**
+ * Whether StrifeBridge MCP Pro is active on this site.
+ *
+ * The mirror of Pro's own dependency check: Pro defines SBMCP_PRO_VERSION at
+ * the top of its main file, before any guard, so the constant is present
+ * whenever Pro is active - including when Pro is active but dormant. The
+ * function_exists() fallback covers a Pro old enough to predate the constant.
+ *
+ * Only call this at runtime, inside a hook, never at file scope: Pro may load
+ * after free, so at require time the answer would be a misleading false.
+ *
+ * @return bool
+ */
+function sbmcp_pro_is_present() {
+    return defined('SBMCP_PRO_VERSION') || function_exists('sbmcp_pro_get_tier');
+}
+
 add_filter('plugin_action_links_' . plugin_basename(__FILE__), 'sbmcp_action_links');
 function sbmcp_action_links($links) {
     array_unshift($links, '<a href="' . admin_url('options-general.php?page=strifebridge-mcp') . '">' . __('Settings', 'strifebridge-mcp') . '</a>');
+
+    // Upsell sits to the left of Settings, and only for users who have not
+    // bought Pro yet. Showing "Unlock Pro" to an existing customer reads as a
+    // billing failure and generates support mail, so this is gated rather
+    // than always-on. One link, no banner: the row stays a normal action row,
+    // and nothing is gated behind it.
+    if (!sbmcp_pro_is_present()) {
+        array_unshift($links, sprintf(
+            '<a href="%s" target="_blank" rel="noopener" style="color:#39b54a;font-weight:600;">%s</a>',
+            esc_url('https://strifetech.com/strifebridge-mcp/#pricing'),
+            esc_html__('Unlock Pro', 'strifebridge-mcp')
+        ));
+    }
+
     return $links;
 }
 
